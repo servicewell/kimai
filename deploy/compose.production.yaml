@@ -1,0 +1,21 @@
+# Use with a separate production .env file and a production checkout.
+name: kimai-production
+services:
+  kimai:
+    environment:
+      KIMAI_PUBLIC_URL: https://time.servicewell.se
+      DEFAULT_URI: https://time.servicewell.se
+      TRUSTED_HOSTS: '^time\.servicewell\.se$'
+      HEALTHCHECK_HOST: time.servicewell.se
+  proxy:
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes: !override
+      - ./config/caddy/production.Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  caddy_data:
+  caddy_config:

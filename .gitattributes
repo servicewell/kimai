@@ -18,3 +18,7 @@ phpstan.sh export-ignore
 phpunit.xml.dist export-ignore
 webpack.config.js export-ignore
 yarn.lock export-ignore
+
+# Linux executable entry points must remain runnable after a Windows checkout.
+*.sh text eol=lf
+/bin/console text eol=lf

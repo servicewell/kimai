@@ -60,3 +60,13 @@
 npm-debug.log
 yarn-error.log
 ###< symfony/webpack-encore-bundle ###
+
+# Docker deployment state (examples are safe to commit)
+/deploy/.env
+/deploy/.env.*
+!/deploy/.env.example
+!/deploy/.env.production.example
+/deploy/config/tls/
+/deploy/config/entra/idp.yaml
+/deploy/config/entra/idp-metadata.xml
+/deploy/backups/
