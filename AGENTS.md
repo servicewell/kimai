@@ -104,6 +104,10 @@ Use this file when working in the Kimai core repository.
 
 ## Git Rules
 
+- Follow the [github-issue-first skill](.agents/skills/github-issue-first/SKILL.md) for repository change work. Before implementation, find or create the task's GitHub issue and state its URL. Limited read-only inspection to establish the repository and scope is allowed first.
+- Reuse the issue for continued work, and record implementation and validation results against it. Read-only questions and reviews do not require a new issue.
+- Every pull request must reference a verified issue. Use `Closes #N` when the PR completes the issue and `Refs #N` for partial work; closing keywords only take effect on the default branch.
+- Stop dependent implementation and PR creation if no real issue can be obtained. Never invent an issue number or silently bypass this requirement.
 - Small fixes should target the active `release-x.y.z` branch
 - Larger changes should go to descriptive `snake_case` feature branches
 - Agents may create branches when needed

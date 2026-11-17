@@ -1,0 +1,6 @@
+interface:
+  display_name: "GitHub Issue First"
+  short_description: "Create an issue first and link every GitHub PR"
+  default_prompt: "Use $github-issue-first to track this repository task from its initial issue through implementation and the linked pull request."
+policy:
+  allow_implicit_invocation: true
