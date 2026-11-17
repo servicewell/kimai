@@ -1,0 +1,9 @@
+{
+	admin off
+}
+
+time.servicewell.se {
+	reverse_proxy kimai:8001 {
+		header_up X-Forwarded-Port 443
+	}
+}

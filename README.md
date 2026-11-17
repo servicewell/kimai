@@ -35,6 +35,7 @@ and so much more.
 
 ## Installation
 
+- [This fork's Docker and Microsoft Entra setup](deploy/README.md) — local HTTPS development and a separate production configuration
 - Caddy with Docker-Compose at [Hetzner](https://www.kimai.org/documentation/hosting-hetzner-cloud.html) and [DigitalOcean](https://www.kimai.org/documentation/hosting-digital-ocean.html)
 - [SSH setup](https://www.kimai.org/documentation/installation.html) with Git and Composer
 - [Docker images](https://hub.docker.com/r/kimai/kimai2) with FPM only or incl. Apache

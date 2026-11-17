@@ -1,0 +1,39 @@
+kimai:
+    saml:
+        activate: true
+        provider: microsoft
+        title: Sign in with Microsoft
+        # Guests can have a tenant-specific #EXT# NameID; use the signed email claim instead.
+        usernameAttribute: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
+        mapping:
+            - { saml: '$http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress', kimai: email }
+            - { saml: '$$http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname $$http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname', kimai: alias }
+        roles:
+            # Manage Kimai administrator roles explicitly; new SAML users receive ROLE_USER.
+            resetOnLogin: false
+            mapping: []
+        connection:
+            # Both environments use the identifier already registered in Entra.
+            baseurl: '%env(KIMAI_PUBLIC_URL)%/auth/saml/'
+            strict: true
+            debug: false
+            sp:
+                entityId: '%env(SAML_ENTITY_ID)%'
+                assertionConsumerService:
+                    url: '%env(KIMAI_PUBLIC_URL)%/auth/saml/acs'
+                    binding: urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST
+                singleLogoutService:
+                    url: '%env(KIMAI_PUBLIC_URL)%/auth/saml/logout'
+                    binding: urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect
+            security:
+                wantAssertionsSigned: true
+                wantXMLValidation: true
+                requestedAuthnContext: false
+                signatureAlgorithm: http://www.w3.org/2001/04/xmldsig-more#rsa-sha256
+                digestAlgorithm: http://www.w3.org/2001/04/xmlenc#sha256
+
+# SAML returns through a cross-site POST, which must retain the session cookie.
+framework:
+    session:
+        cookie_secure: true
+        cookie_samesite: none

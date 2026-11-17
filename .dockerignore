@@ -62,6 +62,7 @@ pnpm-lock.yaml
 webpack.config.js
 
 # Docker and compose (not needed inside the image; .docker/ is copied explicitly)
+deploy/
 docker-compose.yml
 docker-compose.*.yml
 Dockerfile
