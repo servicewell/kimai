@@ -1,0 +1,21 @@
+# Offline staging only. Never start a web server or publish a port here.
+name: kimai-seed-builder
+services:
+  sqldb:
+    extends:
+      file: compose.test.yaml
+      service: sqldb
+  kimai:
+    extends:
+      file: compose.test.yaml
+      service: kimai
+  importer:
+    extends:
+      file: compose.test.yaml
+      service: importer
+networks:
+  default:
+    internal: true
+volumes:
+  mariadb:
+  data:

@@ -1,0 +1,7 @@
+kimai:
+    saml:
+        activate: false
+
+framework:
+    router:
+        default_uri: '%env(DEFAULT_URI)%'

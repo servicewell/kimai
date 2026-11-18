@@ -66,6 +66,10 @@ yarn-error.log
 /deploy/.env.*
 !/deploy/.env.example
 !/deploy/.env.production.example
+!/deploy/.env.test.example
+/deploy/.test-restore.lock
+/deploy/.seed-export.lock
+/deploy/seeds/
 /deploy/config/tls/
 /deploy/config/entra/idp.yaml
 /deploy/config/entra/idp-metadata.xml

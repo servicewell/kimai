@@ -1,0 +1,8 @@
+{
+    auto_https off
+    admin off
+}
+
+:8001 {
+    reverse_proxy kimai:8001
+}
