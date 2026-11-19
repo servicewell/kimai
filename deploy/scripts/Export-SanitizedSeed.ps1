@@ -15,7 +15,7 @@ $environmentFile = Join-Path $deployPath '.env.test'
 $backupPath = (Resolve-Path -LiteralPath $BackupDirectory).ProviderPath
 $outputPath = [IO.Path]::GetFullPath($OutputDirectory)
 $privateRoot = [IO.Path]::GetFullPath((Join-Path $deployPath 'backups')) + [IO.Path]::DirectorySeparatorChar
-if (!$outputPath.StartsWith($privateRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Export seeds only inside the ignored deploy/backups directory; distribute them privately.' }
+if (!$outputPath.StartsWith($privateRoot, [StringComparison]::Ordinal)) { throw 'Export seeds only inside the ignored deploy/backups directory; distribute them privately.' }
 if ((Test-Path -LiteralPath $outputPath) -and @(Get-ChildItem -LiteralPath $outputPath -Force).Count -gt 0) { throw 'Seed output directory must be empty.' }
 & (Join-Path $PSScriptRoot 'Restore-TestBackup.ps1') -BackupDirectory $backupPath -ValidateOnly
 $context = & docker --context default context inspect default
