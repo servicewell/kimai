@@ -106,6 +106,7 @@ try {
 set -euo pipefail
 cd /opt/kimai
 php -d memory_limit=512M bin/console -n kimai:update
+php /restore/Sanitize-TestDatabase.php
 php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@example.invalid ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"
 '@
     Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $prepare) -Quiet -SanitizedOutput
