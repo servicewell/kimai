@@ -1,17 +1,18 @@
 name: kimai-local
 services:
   sqldb:
-    image: mysql:8.4
+    image: mariadb:11.4
     environment:
-      MYSQL_DATABASE: kimai
-      MYSQL_USER: kimai
-      MYSQL_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in the environment file}
-      MYSQL_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:?Set DATABASE_ROOT_PASSWORD in the environment file}
+      MARIADB_DATABASE: kimai
+      MARIADB_USER: kimai
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in the environment file}
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:?Set DATABASE_ROOT_PASSWORD in the environment file}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
-      - mysql:/var/lib/mysql
+      - mariadb:/var/lib/mysql
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin -uroot -p$$MYSQL_ROOT_PASSWORD ping -h 127.0.0.1 --silent"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -42,7 +43,7 @@ services:
       HEALTHCHECK_HOST: localhost
       ADMINMAIL: ${ADMIN_EMAIL}
       ADMINPASS: ${ADMIN_PASSWORD}
-      DATABASE_URL: "mysql://kimai:${DATABASE_PASSWORD}@sqldb:3306/kimai?charset=utf8mb4&serverVersion=8.4.0"
+      DATABASE_URL: "mysql://kimai:${DATABASE_PASSWORD}@sqldb:3306/kimai?charset=utf8mb4&serverVersion=11.4.0-MariaDB"
     volumes:
       - data:/opt/kimai/var/data
       - plugins:/opt/kimai/var/plugins
@@ -68,6 +69,6 @@ services:
       - ./config/tls:/etc/caddy/tls:ro
     restart: unless-stopped
 volumes:
-  mysql:
+  mariadb:
   data:
   plugins:

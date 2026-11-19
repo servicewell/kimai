@@ -1,0 +1,103 @@
+# Standalone file: do not combine this with compose.yaml or production overrides.
+name: test-kimai
+services:
+  sqldb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: kimai
+      MARIADB_USER: kimai
+      MARIADB_PASSWORD: ${TEST_DATABASE_PASSWORD:?Initialize .env.test}
+      MARIADB_ROOT_PASSWORD: ${TEST_DATABASE_ROOT_PASSWORD:?Initialize .env.test}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --event-scheduler=OFF --local-infile=0
+    volumes:
+      - mariadb:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+    restart: 'no'
+  kimai:
+    image: ${TEST_KIMAI_IMAGE:-servicewell/kimai:test}
+    pull_policy: never
+    build:
+      context: ..
+      target: prod
+      args:
+        BASE: apache
+        KIMAI: servicewell-test
+        TIMEZONE: Europe/Stockholm
+    depends_on:
+      sqldb:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      APP_SECRET: ${TEST_APP_SECRET:?Initialize .env.test}
+      DATABASE_URL: mysql://kimai:${TEST_DATABASE_PASSWORD:?Initialize .env.test}@sqldb:3306/kimai?charset=utf8mb4&serverVersion=11.4.0-MariaDB
+      TRUSTED_HOSTS: '^(localhost|127\.0\.0\.1)$'
+      TRUSTED_PROXIES: 127.0.0.1
+      DEFAULT_URI: http://localhost:${TEST_PORT:-8002}
+      KIMAI_PUBLIC_URL: http://localhost:${TEST_PORT:-8002}
+      MAILER_URL: null://null
+      MAILER_FROM: test-kimai@example.invalid
+      ADMINMAIL: ''
+      ADMINPASS: ''
+      TEST_ADMIN_PASSWORD: ${TEST_ADMIN_PASSWORD:?Initialize .env.test}
+      TEST_RESTORE_TARGET: test-kimai
+    # A manual `up` must also refuse to serve an unfinished restore.
+    entrypoint: [/bin/bash, -euc]
+    command:
+      - 'test -f /opt/kimai/var/data/.test-restore-ready || { echo "Run Restore-TestBackup.ps1 first" >&2; exit 1; }; exec /entrypoint.sh'
+    volumes:
+      - data:/opt/kimai/var/data
+      - ./config/test/local.yaml:/opt/kimai/config/packages/local.yaml:ro
+      - ./scripts:/restore:ro
+    healthcheck:
+      test: [CMD, curl, -fsS, -H, 'Host: localhost', 'http://127.0.0.1:8001/']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 120s
+    restart: 'no'
+  proxy:
+    image: caddy:2.11.7-alpine
+    depends_on:
+      kimai:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${TEST_PORT:-8002}:8001'
+    volumes:
+      - ./config/test/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [default, http]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:8001/']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+    restart: 'no'
+  importer:
+    image: mariadb:11.4
+    profiles: [restore]
+    environment:
+      MARIADB_PASSWORD: ${TEST_DATABASE_PASSWORD:?Initialize .env.test}
+    volumes:
+      - ${KIMAI_BACKUP_DIRECTORY:-./backups}:/backup:ro
+    entrypoint: [/bin/bash, -euc]
+    command:
+      - |
+        set -o pipefail
+        cd /backup
+        awk '$$2 ~ /^\*?database\.sql\.gz\.part-[a-z]+$$/ { print }' COMPLETE | sha256sum -c - >/dev/null
+        cat /backup/database.sql.gz.part-* | gzip -dc |
+          MYSQL_PWD="$$MARIADB_PASSWORD" mariadb --host=sqldb --user=kimai --database=kimai --binary-mode --local-infile=0
+    restart: 'no'
+networks:
+  default:
+    internal: true
+  # Only the reverse proxy joins this network to publish a loopback host port.
+  http: {}
+volumes:
+  mariadb:
+  data:
