@@ -3,6 +3,8 @@
 param(
     [Parameter(Mandatory)]
     [string]$BackupDirectory,
+    [ValidateSet('Sanitized', 'Business')]
+    [string]$DataProfile = 'Sanitized',
     [switch]$SkipBuild,
     [switch]$ValidateOnly
 )
@@ -47,7 +49,7 @@ function Invoke-TestCompose {
         # Database import errors can echo production SQL. Never print that output.
         $result = & docker @arguments 2>&1
         if ($LASTEXITCODE -ne 0) {
-            if ($SanitizedOutput) {
+            if ($SanitizedOutput -and $DataProfile -eq 'Sanitized') {
                 $diagnostic = $result -join "`n"
                 $settings = $config.services.kimai.environment
                 $password = ([uri]$settings.DATABASE_URL).UserInfo.Split(':', 2)[1]
@@ -72,10 +74,15 @@ if ($endpoint -notmatch '^(npipe:/{4}\./pipe/|unix:///)') { throw 'Restore requi
 
 $lock = [IO.File]::Open((Join-Path $deployPath '.test-restore.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
 $previousBackupDirectory = $env:KIMAI_BACKUP_DIRECTORY
+$previousAdminUsername = $env:TEST_ADMIN_USERNAME
+$previousAdminEmail = $env:TEST_ADMIN_EMAIL
 $restoreStarted = $false
 $success = $false
 try {
     $env:KIMAI_BACKUP_DIRECTORY = $backupPath
+    $adminSuffix = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(8)).ToLowerInvariant()
+    $env:TEST_ADMIN_USERNAME = "test-local-admin-$adminSuffix"
+    $env:TEST_ADMIN_EMAIL = "$($env:TEST_ADMIN_USERNAME)@example.invalid"
     & (Join-Path $PSScriptRoot 'Initialize-Environment.ps1') -Mode Test
     $configJson = & docker --context default compose --project-name test-kimai --env-file $environmentFile -f $composeFile config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Invalid test Compose configuration.' }
@@ -99,25 +106,33 @@ try {
     Invoke-TestCompose -ComposeArguments @('down', '--volumes')
     Invoke-TestCompose -ComposeArguments @('up', '-d', '--wait', 'sqldb')
     Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', 'importer') -Quiet
-    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php')
+    $profile = $DataProfile.ToLowerInvariant()
+    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', $profile)
 
-    # Migrations and account creation happen after raw production values are removed.
+    # Migrations and account creation happen after the selected credential policy.
     $prepare = @'
 set -euo pipefail
 cd /opt/kimai
 php -d memory_limit=512M bin/console -n kimai:update
-php /restore/Sanitize-TestDatabase.php
-php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@example.invalid ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"
+php /restore/Sanitize-TestDatabase.php --sanitize "$1"
+php -d memory_limit=512M bin/console kimai:user:create "$TEST_ADMIN_USERNAME" "$TEST_ADMIN_EMAIL" ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"
 '@
-    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $prepare) -Quiet -SanitizedOutput
-    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify')
+    $prepare = $prepare.Replace("`r`n", "`n")
+    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $prepare, '--', $profile) -Quiet -SanitizedOutput
+    Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify', $profile)
     Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', 'touch', 'kimai', '/opt/kimai/var/data/.test-restore-ready')
     Invoke-TestCompose -ComposeArguments @('up', '-d', '--no-deps', '--wait', 'kimai', 'proxy')
     $page = Invoke-WebRequest -Uri $config.services.kimai.environment.KIMAI_PUBLIC_URL -MaximumRedirection 5 -TimeoutSec 30
     if ($page.StatusCode -ne 200) { throw 'The test login page did not respond successfully.' }
+    $environmentContent = [IO.File]::ReadAllText($environmentFile)
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_USERNAME=.*$', "TEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)")
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_EMAIL=.*$', "TEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)")
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_USERNAME=') { $environmentContent += "`nTEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)" }
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_EMAIL=') { $environmentContent += "`nTEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)" }
+    [IO.File]::WriteAllText($environmentFile, $environmentContent, [Text.UTF8Encoding]::new($false))
     $success = $true
-    Write-Output "Sanitized test-kimai is ready at $($config.services.kimai.environment.KIMAI_PUBLIC_URL)."
-    Write-Output 'Sign in as test-admin using TEST_ADMIN_PASSWORD in deploy/.env.test. Imported users are disabled.'
+    Write-Output "$DataProfile test-kimai is ready at $($config.services.kimai.environment.KIMAI_PUBLIC_URL)."
+    Write-Output 'Sign in as the generated TEST_ADMIN_USERNAME using TEST_ADMIN_PASSWORD in deploy/.env.test. Imported passwords, tokens, MFA and sessions are removed.'
 } finally {
     try {
         if ($restoreStarted -and !$success) {
@@ -126,6 +141,8 @@ php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@exa
         }
     } finally {
         $env:KIMAI_BACKUP_DIRECTORY = $previousBackupDirectory
+        $env:TEST_ADMIN_USERNAME = $previousAdminUsername
+        $env:TEST_ADMIN_EMAIL = $previousAdminEmail
         $lock.Dispose()
     }
 }

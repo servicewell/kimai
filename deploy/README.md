@@ -129,6 +129,25 @@ Run from `deploy/` with PowerShell 7.2 or newer and local Docker/Compose:
 ./scripts/Restore-TestBackup.ps1 -BackupDirectory ./backups/production
 ```
 
+For integration development requiring original business records, opt in with
+`./scripts/Restore-TestBackup.ps1 -BackupDirectory ./backups/production -DataProfile Business`.
+This keeps names, customer/project references, contacts, rates, budgets, descriptions,
+invoices, templates, preferences, custom fields, roles and enabled flags. It removes
+passwords, API/reset tokens, MFA secrets and sessions, selects local authentication,
+and creates an independent generated local administrator. Imported accounts keep their original
+enabled flags for API/filter testing but have no usable imported login credentials.
+Before and after credential removal, SHA-256 fingerprints of every retained field
+must match. The default profile remains `Sanitized`.
+
+The business profile is a confidential database copy for authorized private use.
+The source backup stays byte-for-byte unchanged. The test copy differs in known
+authentication fields, the new local administrator and any required schema migrations.
+Files/uploads and plugin code are not part of this database restore. Business free
+text, metadata and configuration are preserved; these arbitrary values are not
+certified secret-free. Review them before distribution. The isolated network, disabled
+mail/SAML and localhost binding apply to both profiles. Adding an integration's
+outbound connection is a separate setup step.
+
 The script creates `.env.test` with independent random secrets, verifies the manifest's SQL chunk checksums and sequence, builds the test image, and replaces only the two dedicated test volumes. It uses the explicit `default` Docker context and refuses remote Docker endpoints or volumes belonging to another project. The SQL is imported using the database-scoped `kimai` account. The import container rechecks SQL checksums, and raw SQL/error output is withheld.
 
 The application stays stopped while a standalone PDO script checks and sanitizes the database, without booting plugins against raw data. It then runs Kimai migrations, creates a fresh test administrator, verifies the result and marks the volume ready. The web container refuses startup without this marker. Import/sanitization/preparation failures remove the test containers and volumes, including the raw copy. If Docker itself becomes unavailable during cleanup, restore Docker and run the test-only cleanup command below before starting anything. The source backup remains untouched.
@@ -145,7 +164,7 @@ The application stays stopped while a standalone PDO script checks and sanitizes
 
 This retains real scheduling patterns and stable IDs, so keep access limited to the test team. It is a sanitized test copy, not a guarantee that individuals cannot be inferred from working patterns. Currency/language/customer timezone defaults become SEK/en/Europe-Stockholm; timesheet timezones are retained and validated.
 
-Sign in at `http://localhost:8002` as **test-admin**, using `TEST_ADMIN_PASSWORD` in `deploy/.env.test`. Imported users cannot sign in. Change `TEST_PORT` before the restore if port 8002 is occupied. SSO testing can be prepared separately using dedicated test identities.
+Sign in at `http://localhost:8002` as the generated `TEST_ADMIN_USERNAME`, using `TEST_ADMIN_PASSWORD` in `deploy/.env.test`. Imported users cannot sign in. Change `TEST_PORT` before the restore if port 8002 is occupied. SSO testing can be prepared separately using dedicated test identities.
 
 Repeat the same restore command whenever test needs refreshing. After source changes it rebuilds automatically; use `-SkipBuild` when deliberately reusing an already-built test image. Every refresh discards test edits/files, empties the test volumes, reimports and sanitizes again. It does not refresh continuously from production. The script supports the backup script's two-letter chunk suffixes (up to 676 chunks).
 
@@ -164,3 +183,7 @@ After building the image, the integration suite creates its own synthetic produc
 docker --context default compose --env-file .env.test -f compose.test.yaml build kimai
 ./tests/Test-Restore.ps1
 ```
+
+`./tests/Test-BusinessProfile.ps1` checks retained business values, repeatability,
+unreviewed-column rejection and the anonymous default in a separate offline project.
+It does not replace the running `test-kimai` environment.

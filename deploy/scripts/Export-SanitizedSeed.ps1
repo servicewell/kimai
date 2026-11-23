@@ -5,6 +5,8 @@ param(
     [string]$BackupDirectory,
     [Parameter(Mandatory)]
     [string]$OutputDirectory,
+    [ValidateSet('Sanitized', 'Business')]
+    [string]$DataProfile = 'Sanitized',
     [switch]$SkipBuild
 )
 
@@ -43,10 +45,13 @@ try {
     Invoke-SeedCompose -Arguments @('down', '--volumes')
     Invoke-SeedCompose -Arguments @('up', '-d', '--wait', 'sqldb')
     Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', 'importer') -Quiet
-    Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php')
+    $profile = $DataProfile.ToLowerInvariant()
+    Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', $profile)
     Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '-d', 'memory_limit=512M', '/opt/kimai/bin/console', '-n', 'kimai:update', '--no-cache') -Quiet
+    # Migrations may populate defaults. Reapply and verify the chosen policy.
+    Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', $profile)
     # No administrator is created in a seed. Even test password hashes must be absent.
-    Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify-seed')
+    Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify-seed', $profile)
     [IO.Directory]::CreateDirectory($outputPath) | Out-Null
     $dump = @'
 set -euo pipefail
@@ -55,6 +60,7 @@ MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --host=sqldb --user=kimai --single-tr
 cd /seed-output
 sha256sum database.sql.gz.part-* > COMPLETE
 '@
+    $dump = $dump.Replace("`r`n", "`n")
     Invoke-SeedCompose -Arguments @('run', '--rm', '--no-deps', '-v', "${outputPath}:/seed-output", '--entrypoint', '/bin/bash', 'importer', '-euc', $dump) -Quiet
     & (Join-Path $PSScriptRoot 'Restore-TestBackup.ps1') -BackupDirectory $outputPath -ValidateOnly
     $metadataCode = @'
@@ -67,8 +73,15 @@ echo json_encode(['formatVersion' => 1, 'kind' => 'kimai-sanitized-seed', 'kimai
 '@
     $metadata = & docker --context default compose --project-name kimai-seed-builder --env-file $environmentFile -f $composeFile run --rm --no-deps --entrypoint php kimai -r $metadataCode
     if ($LASTEXITCODE -ne 0) { throw 'Seed metadata verification failed.' }
-    [IO.File]::WriteAllText((Join-Path $outputPath 'seed.json'), (($metadata | ConvertFrom-Json) | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
-    Write-Output "Verified credential-free sanitized seed: $outputPath"
+    $seedMetadata = $metadata | ConvertFrom-Json
+    $seedMetadata | Add-Member -NotePropertyName dataProfile -NotePropertyValue $profile
+    if ($DataProfile -eq 'Business') {
+        $seedMetadata.kind = 'kimai-business-seed'
+        $seedMetadata.accounts = 'Original identities, enabled flags and roles; passwords, API tokens, MFA and sessions removed; no shared administrator'
+        $seedMetadata.privacy = 'Confidential production business data; private authorized team use only; no anonymization'
+    }
+    [IO.File]::WriteAllText((Join-Path $outputPath 'seed.json'), ($seedMetadata | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    Write-Output "Verified $DataProfile seed with no account credentials: $outputPath"
 } catch {
     # An incomplete export is never advertised as a completed seed.
     $marker = Join-Path $outputPath 'COMPLETE'

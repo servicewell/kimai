@@ -14,6 +14,7 @@ $kernel = new App\Kernel('prod', false);
 $kernel->boot();
 $manager = $kernel->getContainer()->get('doctrine')->getManager();
 $db = $manager->getConnection();
+$adminUsername = getenv('TEST_ADMIN_USERNAME') ?: 'test-local-admin';
 if (($argv[1] ?? '') === 'seed') {
     $user = new App\Entity\User();
     // Deliberately collide with another user's final placeholder to test unique updates.
@@ -78,6 +79,13 @@ if (($argv[1] ?? '') === 'seed') {
     $manager->persist($token);
     $manager->flush();
     $db->insert('kimai2_configuration', ['name' => 'PRODUCTION_SENTINEL webhook', 'value' => 'https://production.example.com']);
+    $db->insert('kimai2_configuration', ['name' => 'saml.activate', 'value' => '1']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.activate', 'value' => '1']);
+    $db->insert('kimai2_configuration', ['name' => 'user.login', 'value' => '0']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.connection.password', 'value' => 'PRODUCTION_SENTINEL ldap password']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.connection.username', 'value' => 'PRODUCTION_SENTINEL ldap bind name']);
+    $db->insert('kimai2_configuration', ['name' => 'saml.connection.sp.privateKey', 'value' => 'PRODUCTION_SENTINEL saml private key']);
+    $db->insert('kimai2_configuration', ['name' => 'calendar.google.api_key', 'value' => 'PRODUCTION_SENTINEL google api key']);
     $db->insert('kimai2_sessions', ['id' => 'synthetic-production-session', 'data' => 'PRODUCTION_SENTINEL session', 'time' => time(), 'lifetime' => 3600]);
     $db->insert('kimai2_user_preferences', ['user_id' => $user->getId(), 'name' => 'salary', 'value' => 'PRODUCTION_SENTINEL payroll']);
     $db->insert('kimai2_customers_meta', ['customer_id' => $customer->getId(), 'name' => 'private', 'value' => 'PRODUCTION_SENTINEL metadata', 'visible' => 1]);
@@ -96,6 +104,33 @@ if (($argv[1] ?? '') === 'seed') {
     exit;
 }
 
+if (($argv[1] ?? '') === 'assert-business') {
+    if ($db->fetchOne('SELECT name FROM kimai2_customers LIMIT 1') !== 'PRODUCTION_SENTINEL customer'
+        || $db->fetchOne('SELECT email FROM kimai2_customers LIMIT 1') !== 'original@example.com'
+        || $db->fetchOne('SELECT order_number FROM kimai2_projects LIMIT 1') !== 'PRODUCTION_SENTINEL order'
+        || (float) $db->fetchOne('SELECT SUM(rate) FROM kimai2_timesheet') !== 29628.0
+        || (float) $db->fetchOne('SELECT SUM(budget) FROM kimai2_customers') !== 12345.0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_invoices') !== 1
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_customers_meta') !== 1
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_user_preferences WHERE name = 'salary'") !== 1
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_configuration WHERE name = 'PRODUCTION_SENTINEL webhook'") !== 1
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'saml.activate'") !== '0'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.activate'") !== '0'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'user.login'") !== '1'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.connection.password'") !== ''
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.connection.username'") !== 'PRODUCTION_SENTINEL ldap bind name'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'saml.connection.sp.privateKey'") !== ''
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'calendar.google.api_key'") !== ''
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE enabled = 1') !== 2
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL") !== 0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_access_token') !== 0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_sessions') !== 0) {
+        throw new RuntimeException('Business fixture values or credential removal are incorrect.');
+    }
+    echo "Business fixture verified: original identities, enabled flags, references, amounts and metadata; credentials removed.\n";
+    exit;
+}
+
 foreach ($db->fetchFirstColumn('SHOW TABLES') as $table) {
     foreach ($db->fetchAllAssociative('SHOW COLUMNS FROM `' . $table . '`') as $column) {
         if (preg_match('/char|text|blob|json/', $column['Type']) !== 1) {
@@ -110,7 +145,7 @@ if ((int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet') !== 2 || (int) 
     || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_timesheet WHERE date_tz = '2026-10-01'") !== 2
     || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet t JOIN kimai2_users u ON u.id = t.user JOIN kimai2_projects p ON p.id = t.project_id JOIN kimai2_customers c ON c.id = p.customer_id JOIN kimai2_activities a ON a.id = t.activity_id') !== 2
     || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet_tags') !== 2
-    || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE username <> 'test-admin' AND (enabled <> 0 OR password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL)") !== 0
+    || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE username <> ' . $db->quote($adminUsername) . " AND (enabled <> 0 OR password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL)") !== 0
     || (float) $db->fetchOne('SELECT SUM(rate) FROM kimai2_timesheet') !== 300.0
     || (float) $db->fetchOne('SELECT SUM(budget) FROM kimai2_customers') !== 0.0) {
     throw new RuntimeException('Restored fixture relationships, duration, credentials or synthetic rates are incorrect.');
