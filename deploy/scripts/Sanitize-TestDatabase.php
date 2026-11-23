@@ -41,6 +41,12 @@ $authenticationConfiguration = [
     'ldap.activate' => '0',
     'user.login' => '1',
 ];
+$credentialConfiguration = [
+    'ldap.connection.password' => '',
+    'saml.connection.sp.privateKey' => '',
+    'calendar.google.api_key' => '',
+];
+$scrubbedConfiguration = $authenticationConfiguration + $credentialConfiguration;
 $budget = ['budget' => '0', 'time_budget' => '0', 'budget_type' => 'NULL'];
 $color = ['color' => "'#4c78a8'"];
 $policies = [
@@ -213,6 +219,17 @@ try {
             }
         }
     }
+    if ($profile === 'business' && isset($columns['kimai2_configuration'])) {
+        foreach ($scrubbedConfiguration as $name => $value) {
+            $count = (int) $db->query(
+                'SELECT COUNT(*) FROM `kimai2_configuration` WHERE `name` = ' . $db->quote($name)
+                . ' AND `value` <> ' . $db->quote((string) $value)
+            )->fetchColumn();
+            if ($count !== 0) {
+                throw new RuntimeException('Credential configuration verification failed for ' . $name);
+            }
+        }
+    }
     foreach (['kimai2_users', 'kimai2_customers', 'kimai2_projects', 'kimai2_activities', 'kimai2_timesheet', 'migration_versions'] as $required) {
         if (!isset($columns[$required])) {
             throw new RuntimeException('Backup is missing a required core table.');
@@ -239,7 +256,7 @@ try {
         }
     }
     $before = $db->query('SELECT COUNT(*) AS records, COALESCE(SUM(duration), 0) AS seconds FROM kimai2_timesheet')->fetch(PDO::FETCH_ASSOC);
-    $businessBefore = $profile === 'business' && !$verifyOnly ? businessFingerprints($db, $policies, $columns, array_keys($authenticationConfiguration)) : null;
+    $businessBefore = $profile === 'business' && !$verifyOnly ? businessFingerprints($db, $policies, $columns, array_keys($scrubbedConfiguration)) : null;
     if (!$verifyOnly) {
         $db->beginTransaction();
         foreach ($purge as $name) {
@@ -268,7 +285,7 @@ try {
             $db->exec('UPDATE ' . identifier($name) . ' SET ' . implode(', ', $assignments));
         }
         if ($profile === 'business' && isset($columns['kimai2_configuration'])) {
-            foreach ($authenticationConfiguration as $name => $value) {
+            foreach ($scrubbedConfiguration as $name => $value) {
                 $db->exec('UPDATE `kimai2_configuration` SET `value` = ' . $db->quote($value) . ' WHERE `name` = ' . $db->quote($name));
             }
         }
@@ -331,7 +348,7 @@ try {
     if ($before !== $after) {
         throw new RuntimeException('Sanitization changed timesheet counts or duration totals.');
     }
-    if ($businessBefore !== null && $businessBefore !== businessFingerprints($db, $policies, $columns, array_keys($authenticationConfiguration))) {
+    if ($businessBefore !== null && $businessBefore !== businessFingerprints($db, $policies, $columns, array_keys($scrubbedConfiguration))) {
         throw new RuntimeException('Credential removal changed business records.');
     }
     if ($db->inTransaction()) {

@@ -84,12 +84,6 @@ try {
     $env:TEST_ADMIN_USERNAME = "test-local-admin-$adminSuffix"
     $env:TEST_ADMIN_EMAIL = "$($env:TEST_ADMIN_USERNAME)@example.invalid"
     & (Join-Path $PSScriptRoot 'Initialize-Environment.ps1') -Mode Test
-    $environmentContent = [IO.File]::ReadAllText($environmentFile)
-    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_USERNAME=.*$', "TEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)")
-    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_EMAIL=.*$', "TEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)")
-    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_USERNAME=') { $environmentContent += "`nTEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)" }
-    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_EMAIL=') { $environmentContent += "`nTEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)" }
-    [IO.File]::WriteAllText($environmentFile, $environmentContent, [Text.UTF8Encoding]::new($false))
     $configJson = & docker --context default compose --project-name test-kimai --env-file $environmentFile -f $composeFile config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Invalid test Compose configuration.' }
     $config = $configJson | ConvertFrom-Json
@@ -130,6 +124,12 @@ php -d memory_limit=512M bin/console kimai:user:create "$TEST_ADMIN_USERNAME" "$
     Invoke-TestCompose -ComposeArguments @('up', '-d', '--no-deps', '--wait', 'kimai', 'proxy')
     $page = Invoke-WebRequest -Uri $config.services.kimai.environment.KIMAI_PUBLIC_URL -MaximumRedirection 5 -TimeoutSec 30
     if ($page.StatusCode -ne 200) { throw 'The test login page did not respond successfully.' }
+    $environmentContent = [IO.File]::ReadAllText($environmentFile)
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_USERNAME=.*$', "TEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)")
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_EMAIL=.*$', "TEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)")
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_USERNAME=') { $environmentContent += "`nTEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)" }
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_EMAIL=') { $environmentContent += "`nTEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)" }
+    [IO.File]::WriteAllText($environmentFile, $environmentContent, [Text.UTF8Encoding]::new($false))
     $success = $true
     Write-Output "$DataProfile test-kimai is ready at $($config.services.kimai.environment.KIMAI_PUBLIC_URL)."
     Write-Output 'Sign in as the generated TEST_ADMIN_USERNAME using TEST_ADMIN_PASSWORD in deploy/.env.test. Imported passwords, tokens, MFA and sessions are removed.'

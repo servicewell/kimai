@@ -82,6 +82,10 @@ if (($argv[1] ?? '') === 'seed') {
     $db->insert('kimai2_configuration', ['name' => 'saml.activate', 'value' => '1']);
     $db->insert('kimai2_configuration', ['name' => 'ldap.activate', 'value' => '1']);
     $db->insert('kimai2_configuration', ['name' => 'user.login', 'value' => '0']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.connection.password', 'value' => 'PRODUCTION_SENTINEL ldap password']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.connection.username', 'value' => 'PRODUCTION_SENTINEL ldap bind name']);
+    $db->insert('kimai2_configuration', ['name' => 'saml.connection.sp.privateKey', 'value' => 'PRODUCTION_SENTINEL saml private key']);
+    $db->insert('kimai2_configuration', ['name' => 'calendar.google.api_key', 'value' => 'PRODUCTION_SENTINEL google api key']);
     $db->insert('kimai2_sessions', ['id' => 'synthetic-production-session', 'data' => 'PRODUCTION_SENTINEL session', 'time' => time(), 'lifetime' => 3600]);
     $db->insert('kimai2_user_preferences', ['user_id' => $user->getId(), 'name' => 'salary', 'value' => 'PRODUCTION_SENTINEL payroll']);
     $db->insert('kimai2_customers_meta', ['customer_id' => $customer->getId(), 'name' => 'private', 'value' => 'PRODUCTION_SENTINEL metadata', 'visible' => 1]);
@@ -113,6 +117,10 @@ if (($argv[1] ?? '') === 'assert-business') {
         || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'saml.activate'") !== '0'
         || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.activate'") !== '0'
         || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'user.login'") !== '1'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.connection.password'") !== ''
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.connection.username'") !== 'PRODUCTION_SENTINEL ldap bind name'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'saml.connection.sp.privateKey'") !== ''
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'calendar.google.api_key'") !== ''
         || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE enabled = 1') !== 2
         || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL") !== 0
         || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_access_token') !== 0
