@@ -44,6 +44,8 @@ services:
       ADMINMAIL: ''
       ADMINPASS: ''
       TEST_ADMIN_PASSWORD: ${TEST_ADMIN_PASSWORD:?Initialize .env.test}
+      TEST_ADMIN_USERNAME: ${TEST_ADMIN_USERNAME:-test-local-admin}
+      TEST_ADMIN_EMAIL: ${TEST_ADMIN_EMAIL:-test-local-admin@example.invalid}
       TEST_RESTORE_TARGET: test-kimai
     # A manual `up` must also refuse to serve an unfinished restore.
     entrypoint: [/bin/bash, -euc]

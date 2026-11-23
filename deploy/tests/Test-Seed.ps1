@@ -29,11 +29,16 @@ foreach ($volume in @('kimai-seed-check_mariadb', 'kimai-seed-check_data')) {
 }
 $previousBackup = $env:KIMAI_BACKUP_DIRECTORY
 $previousPassword = $env:TEST_ADMIN_PASSWORD
+$previousAdminUsername = $env:TEST_ADMIN_USERNAME
+$previousAdminEmail = $env:TEST_ADMIN_EMAIL
 $started = $false
 try {
     $env:KIMAI_BACKUP_DIRECTORY = $seedPath
     # Model a different developer: a fresh password unrelated to the exporting machine.
     $env:TEST_ADMIN_PASSWORD = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()
+    $adminSuffix = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(8)).ToLowerInvariant()
+    $env:TEST_ADMIN_USERNAME = "test-local-admin-$adminSuffix"
+    $env:TEST_ADMIN_EMAIL = "$($env:TEST_ADMIN_USERNAME)@example.invalid"
     $started = $true
     Compose -Arguments @('up', '-d', '--wait', 'sqldb')
     Compose -Arguments @('run', '--rm', '--no-deps', 'importer') -Quiet
@@ -46,7 +51,7 @@ try {
     if ($LASTEXITCODE -eq 0) { throw 'Seed verification accepted a password leak.' }
     Write-Output 'PASS: Seed verification rejects a retained password'
     Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', $profile)
-    $create = 'php -d memory_limit=512M /opt/kimai/bin/console kimai:user:create test-admin test-admin@example.invalid ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"'
+    $create = 'php -d memory_limit=512M /opt/kimai/bin/console kimai:user:create "$TEST_ADMIN_USERNAME" "$TEST_ADMIN_EMAIL" ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"'
     Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $create) -Quiet
     Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify', $profile)
     Write-Output 'PASS: Restoring developer creates a fresh independently verified administrator'
@@ -54,5 +59,7 @@ try {
     try { if ($started) { Compose -Arguments @('down', '--volumes') } } finally {
         $env:KIMAI_BACKUP_DIRECTORY = $previousBackup
         $env:TEST_ADMIN_PASSWORD = $previousPassword
+        $env:TEST_ADMIN_USERNAME = $previousAdminUsername
+        $env:TEST_ADMIN_EMAIL = $previousAdminEmail
     }
 }

@@ -29,7 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Private test bundle download failed.' }
 & (Join-Path $destination 'deploy/scripts/Start-TeamTest.ps1')
 ```
 
-Use a new empty download directory. Open **http://localhost:8002** and sign in as **test-admin**. Its generated password is `TEST_ADMIN_PASSWORD` in the downloaded bundle's `deploy/.env.test`. That file is private to your machine and is never part of the package. To use another port, initialize `deploy/.env.test` with `Initialize-Environment.ps1 -Mode Test`, change `TEST_PORT`, then run `Start-TeamTest.ps1`.
+Use a new empty download directory. Open **http://localhost:8002** and sign in as the generated `TEST_ADMIN_USERNAME`. Its generated password is `TEST_ADMIN_PASSWORD` in the downloaded bundle's `deploy/.env.test`. That file is private to your machine and is never part of the package. To use another port, initialize `deploy/.env.test` with `Initialize-Environment.ps1 -Mode Test`, change `TEST_PORT`, then run `Start-TeamTest.ps1`.
 
 `Start-TeamTest.ps1` resets only the local `test-kimai` project. Existing edits in that disposable test database/files are discarded. Run it again with `-SkipBuild` to reset to the same seed without rebuilding the application. MariaDB 11.4, mail disabled, SAML disabled, internal application/database networking and a loopback-only proxy are used. No production access or production credentials are required.
 

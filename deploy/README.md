@@ -134,7 +134,7 @@ For integration development requiring original business records, opt in with
 This keeps names, customer/project references, contacts, rates, budgets, descriptions,
 invoices, templates, preferences, custom fields, roles and enabled flags. It removes
 passwords, API/reset tokens, MFA secrets and sessions, selects local authentication,
-and creates the independent `test-admin`. Imported accounts keep their original
+and creates an independent generated local administrator. Imported accounts keep their original
 enabled flags for API/filter testing but have no usable imported login credentials.
 Before and after credential removal, SHA-256 fingerprints of every retained field
 must match. The default profile remains `Sanitized`.
@@ -164,7 +164,7 @@ The application stays stopped while a standalone PDO script checks and sanitizes
 
 This retains real scheduling patterns and stable IDs, so keep access limited to the test team. It is a sanitized test copy, not a guarantee that individuals cannot be inferred from working patterns. Currency/language/customer timezone defaults become SEK/en/Europe-Stockholm; timesheet timezones are retained and validated.
 
-Sign in at `http://localhost:8002` as **test-admin**, using `TEST_ADMIN_PASSWORD` in `deploy/.env.test`. Imported users cannot sign in. Change `TEST_PORT` before the restore if port 8002 is occupied. SSO testing can be prepared separately using dedicated test identities.
+Sign in at `http://localhost:8002` as the generated `TEST_ADMIN_USERNAME`, using `TEST_ADMIN_PASSWORD` in `deploy/.env.test`. Imported users cannot sign in. Change `TEST_PORT` before the restore if port 8002 is occupied. SSO testing can be prepared separately using dedicated test identities.
 
 Repeat the same restore command whenever test needs refreshing. After source changes it rebuilds automatically; use `-SkipBuild` when deliberately reusing an already-built test image. Every refresh discards test edits/files, empties the test volumes, reimports and sanitizes again. It does not refresh continuously from production. The script supports the backup script's two-letter chunk suffixes (up to 676 chunks).
 

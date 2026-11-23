@@ -14,6 +14,7 @@ $kernel = new App\Kernel('prod', false);
 $kernel->boot();
 $manager = $kernel->getContainer()->get('doctrine')->getManager();
 $db = $manager->getConnection();
+$adminUsername = getenv('TEST_ADMIN_USERNAME') ?: 'test-local-admin';
 if (($argv[1] ?? '') === 'seed') {
     $user = new App\Entity\User();
     // Deliberately collide with another user's final placeholder to test unique updates.
@@ -78,6 +79,9 @@ if (($argv[1] ?? '') === 'seed') {
     $manager->persist($token);
     $manager->flush();
     $db->insert('kimai2_configuration', ['name' => 'PRODUCTION_SENTINEL webhook', 'value' => 'https://production.example.com']);
+    $db->insert('kimai2_configuration', ['name' => 'saml.activate', 'value' => '1']);
+    $db->insert('kimai2_configuration', ['name' => 'ldap.activate', 'value' => '1']);
+    $db->insert('kimai2_configuration', ['name' => 'user.login', 'value' => '0']);
     $db->insert('kimai2_sessions', ['id' => 'synthetic-production-session', 'data' => 'PRODUCTION_SENTINEL session', 'time' => time(), 'lifetime' => 3600]);
     $db->insert('kimai2_user_preferences', ['user_id' => $user->getId(), 'name' => 'salary', 'value' => 'PRODUCTION_SENTINEL payroll']);
     $db->insert('kimai2_customers_meta', ['customer_id' => $customer->getId(), 'name' => 'private', 'value' => 'PRODUCTION_SENTINEL metadata', 'visible' => 1]);
@@ -106,6 +110,9 @@ if (($argv[1] ?? '') === 'assert-business') {
         || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_customers_meta') !== 1
         || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_user_preferences WHERE name = 'salary'") !== 1
         || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_configuration WHERE name = 'PRODUCTION_SENTINEL webhook'") !== 1
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'saml.activate'") !== '0'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'ldap.activate'") !== '0'
+        || $db->fetchOne("SELECT value FROM kimai2_configuration WHERE name = 'user.login'") !== '1'
         || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE enabled = 1') !== 2
         || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL") !== 0
         || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_access_token') !== 0
@@ -130,7 +137,7 @@ if ((int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet') !== 2 || (int) 
     || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_timesheet WHERE date_tz = '2026-10-01'") !== 2
     || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet t JOIN kimai2_users u ON u.id = t.user JOIN kimai2_projects p ON p.id = t.project_id JOIN kimai2_customers c ON c.id = p.customer_id JOIN kimai2_activities a ON a.id = t.activity_id') !== 2
     || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_timesheet_tags') !== 2
-    || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE username <> 'test-admin' AND (enabled <> 0 OR password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL)") !== 0
+    || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE username <> ' . $db->quote($adminUsername) . " AND (enabled <> 0 OR password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL)") !== 0
     || (float) $db->fetchOne('SELECT SUM(rate) FROM kimai2_timesheet') !== 300.0
     || (float) $db->fetchOne('SELECT SUM(budget) FROM kimai2_customers') !== 0.0) {
     throw new RuntimeException('Restored fixture relationships, duration, credentials or synthetic rates are incorrect.');

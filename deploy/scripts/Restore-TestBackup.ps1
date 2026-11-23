@@ -74,11 +74,22 @@ if ($endpoint -notmatch '^(npipe:/{4}\./pipe/|unix:///)') { throw 'Restore requi
 
 $lock = [IO.File]::Open((Join-Path $deployPath '.test-restore.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
 $previousBackupDirectory = $env:KIMAI_BACKUP_DIRECTORY
+$previousAdminUsername = $env:TEST_ADMIN_USERNAME
+$previousAdminEmail = $env:TEST_ADMIN_EMAIL
 $restoreStarted = $false
 $success = $false
 try {
     $env:KIMAI_BACKUP_DIRECTORY = $backupPath
+    $adminSuffix = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(8)).ToLowerInvariant()
+    $env:TEST_ADMIN_USERNAME = "test-local-admin-$adminSuffix"
+    $env:TEST_ADMIN_EMAIL = "$($env:TEST_ADMIN_USERNAME)@example.invalid"
     & (Join-Path $PSScriptRoot 'Initialize-Environment.ps1') -Mode Test
+    $environmentContent = [IO.File]::ReadAllText($environmentFile)
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_USERNAME=.*$', "TEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)")
+    $environmentContent = [regex]::Replace($environmentContent, '(?m)^TEST_ADMIN_EMAIL=.*$', "TEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)")
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_USERNAME=') { $environmentContent += "`nTEST_ADMIN_USERNAME=$($env:TEST_ADMIN_USERNAME)" }
+    if ($environmentContent -notmatch '(?m)^TEST_ADMIN_EMAIL=') { $environmentContent += "`nTEST_ADMIN_EMAIL=$($env:TEST_ADMIN_EMAIL)" }
+    [IO.File]::WriteAllText($environmentFile, $environmentContent, [Text.UTF8Encoding]::new($false))
     $configJson = & docker --context default compose --project-name test-kimai --env-file $environmentFile -f $composeFile config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Invalid test Compose configuration.' }
     $config = $configJson | ConvertFrom-Json
@@ -110,7 +121,7 @@ set -euo pipefail
 cd /opt/kimai
 php -d memory_limit=512M bin/console -n kimai:update
 php /restore/Sanitize-TestDatabase.php --sanitize "$1"
-php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@example.invalid ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"
+php -d memory_limit=512M bin/console kimai:user:create "$TEST_ADMIN_USERNAME" "$TEST_ADMIN_EMAIL" ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"
 '@
     $prepare = $prepare.Replace("`r`n", "`n")
     Invoke-TestCompose -ComposeArguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $prepare, '--', $profile) -Quiet -SanitizedOutput
@@ -121,7 +132,7 @@ php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@exa
     if ($page.StatusCode -ne 200) { throw 'The test login page did not respond successfully.' }
     $success = $true
     Write-Output "$DataProfile test-kimai is ready at $($config.services.kimai.environment.KIMAI_PUBLIC_URL)."
-    Write-Output 'Sign in as test-admin using TEST_ADMIN_PASSWORD in deploy/.env.test. Imported passwords, tokens, MFA and sessions are removed.'
+    Write-Output 'Sign in as the generated TEST_ADMIN_USERNAME using TEST_ADMIN_PASSWORD in deploy/.env.test. Imported passwords, tokens, MFA and sessions are removed.'
 } finally {
     try {
         if ($restoreStarted -and !$success) {
@@ -130,6 +141,8 @@ php -d memory_limit=512M bin/console kimai:user:create test-admin test-admin@exa
         }
     } finally {
         $env:KIMAI_BACKUP_DIRECTORY = $previousBackupDirectory
+        $env:TEST_ADMIN_USERNAME = $previousAdminUsername
+        $env:TEST_ADMIN_EMAIL = $previousAdminEmail
         $lock.Dispose()
     }
 }
