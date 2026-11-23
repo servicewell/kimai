@@ -29,6 +29,7 @@ MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --host=sqldb --user=kimai --single-tr
 cd /fixture-output
 sha256sum database.sql.gz.part-* > COMPLETE
 '@
+    $dump = $dump.Replace("`r`n", "`n")
     Compose -Arguments @('run', '--rm', '--no-deps', '-v', "${destination}:/fixture-output", '--entrypoint', '/bin/bash', 'importer', '-euc', $dump)
     return $destination
 }

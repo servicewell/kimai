@@ -96,6 +96,26 @@ if (($argv[1] ?? '') === 'seed') {
     exit;
 }
 
+if (($argv[1] ?? '') === 'assert-business') {
+    if ($db->fetchOne('SELECT name FROM kimai2_customers LIMIT 1') !== 'PRODUCTION_SENTINEL customer'
+        || $db->fetchOne('SELECT email FROM kimai2_customers LIMIT 1') !== 'original@example.com'
+        || $db->fetchOne('SELECT order_number FROM kimai2_projects LIMIT 1') !== 'PRODUCTION_SENTINEL order'
+        || (float) $db->fetchOne('SELECT SUM(rate) FROM kimai2_timesheet') !== 29628.0
+        || (float) $db->fetchOne('SELECT SUM(budget) FROM kimai2_customers') !== 12345.0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_invoices') !== 1
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_customers_meta') !== 1
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_user_preferences WHERE name = 'salary'") !== 1
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_configuration WHERE name = 'PRODUCTION_SENTINEL webhook'") !== 1
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_users WHERE enabled = 1') !== 2
+        || (int) $db->fetchOne("SELECT COUNT(*) FROM kimai2_users WHERE password <> '' OR api_token IS NOT NULL OR totp_secret IS NOT NULL") !== 0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_access_token') !== 0
+        || (int) $db->fetchOne('SELECT COUNT(*) FROM kimai2_sessions') !== 0) {
+        throw new RuntimeException('Business fixture values or credential removal are incorrect.');
+    }
+    echo "Business fixture verified: original identities, enabled flags, references, amounts and metadata; credentials removed.\n";
+    exit;
+}
+
 foreach ($db->fetchFirstColumn('SHOW TABLES') as $table) {
     foreach ($db->fetchAllAssociative('SHOW COLUMNS FROM `' . $table . '`') as $column) {
         if (preg_match('/char|text|blob|json/', $column['Type']) !== 1) {

@@ -17,10 +17,14 @@ if ($url === false || ($url['host'] ?? '') !== 'sqldb' || ($url['path'] ?? '') !
 }
 $db = new PDO('mysql:host=sqldb;dbname=kimai;charset=utf8mb4', 'kimai', rawurldecode($url['pass']), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $mode = $argv[1] ?? '';
-if (!in_array($mode, ['', '--verify', '--verify-seed'], true)) {
+if (!in_array($mode, ['', '--sanitize', '--verify', '--verify-seed'], true)) {
     throw new InvalidArgumentException('Unknown sanitizer mode.');
 }
-$verifyOnly = $mode !== '';
+$profile = strtolower($argv[2] ?? 'sanitized');
+if (!in_array($profile, ['sanitized', 'business'], true)) {
+    throw new InvalidArgumentException('Unknown data profile.');
+}
+$verifyOnly = !in_array($mode, ['', '--sanitize'], true);
 $verifyAdmin = $mode === '--verify';
 
 // Every retained column is reviewed here. Additional tables/columns fail closed.
@@ -95,6 +99,44 @@ foreach (['activities' => 'activity_id', 'customers' => 'customer_id', 'projects
     ];
 }
 
+// Opt-in private business copy: preserve identities, enabled flags, financial data,
+// preferences, metadata and documents' database records. Remove login secrets only.
+if ($profile === 'business') {
+    $credentials = [
+        'password' => "''", 'api_token' => 'NULL', 'confirmation_token' => 'NULL',
+        'totp_secret' => 'NULL', 'totp_enabled' => '0', 'password_requested_at' => 'NULL', 'auth' => "'kimai'",
+    ];
+    foreach ($policies as $name => &$policy) {
+        $fields = array_merge(explode(' ', $policy['keep']), array_keys($policy['set']));
+        $policy['set'] = $name === 'kimai2_users' ? $credentials : [];
+        $policy['keep'] = implode(' ', array_diff($fields, array_keys($policy['set'])));
+    }
+    unset($policy);
+    // Reviewed core schemas, including the tables discarded by the anonymous mode.
+    $businessTables = [
+        'user_preferences' => 'id user_id name value',
+        'bookmarks' => 'id user_id type name content',
+        'configuration' => 'id name value',
+        'activities_meta' => 'id activity_id name value visible',
+        'customers_meta' => 'id customer_id name value visible',
+        'projects_meta' => 'id project_id name value visible',
+        'timesheet_meta' => 'id timesheet_id name value visible',
+        'customers_comments' => 'id customer_id created_by_id message created_at pinned',
+        'projects_comments' => 'id project_id created_by_id message created_at pinned',
+        'invoices_meta' => 'id invoice_id name value visible',
+        'invoice_templates_meta' => 'id template_id name value visible',
+        'invoices' => 'id customer_id user_id invoice_number created_at timezone total tax currency status due_days vat invoice_filename payment_date comment',
+        'invoice_templates' => 'id name title company address due_days vat calculator number_generator renderer payment_terms vat_id contact payment_details language customer_id',
+        'export_templates' => 'id title renderer language columns options',
+        'roles_permissions' => 'id role_id permission allowed',
+        'roles' => 'id name',
+    ];
+    foreach ($businessTables as $name => $fields) {
+        $policies['kimai2_' . $name] = ['keep' => $fields, 'set' => []];
+    }
+    $purge = ['kimai2_access_token', 'kimai2_sessions'];
+}
+
 function identifier(string $name): string
 {
     if (preg_match('/^[a-zA-Z0-9_]+$/D', $name) !== 1) {
@@ -102,6 +144,32 @@ function identifier(string $name): string
     }
 
     return '`' . $name . '`';
+}
+
+function businessFingerprints(PDO $db, array $policies, array $columns): array
+{
+    $result = [];
+    foreach ($policies as $name => $policy) {
+        if (!isset($columns[$name])) {
+            continue;
+        }
+        $fields = array_intersect(explode(' ', $policy['keep']), array_column($columns[$name], 'Field'));
+        $selection = implode(', ', array_map(identifier(...), $fields));
+        $keys = $db->query('SHOW INDEX FROM ' . identifier($name) . " WHERE Key_name = 'PRIMARY'")->fetchAll(PDO::FETCH_ASSOC);
+        usort($keys, fn ($left, $right) => (int) $left['Seq_in_index'] <=> (int) $right['Seq_in_index']);
+        if ($keys === []) {
+            throw new RuntimeException('Business fingerprints require a primary key.');
+        }
+        $order = implode(', ', array_map(identifier(...), array_column($keys, 'Column_name')));
+        $rows = $db->query('SELECT ' . $selection . ' FROM ' . identifier($name) . ' ORDER BY ' . $order);
+        $hash = hash_init('sha256');
+        while ($row = $rows->fetch(PDO::FETCH_NUM)) {
+            hash_update($hash, serialize($row));
+        }
+        $result[$name] = hash_final($hash);
+    }
+
+    return $result;
 }
 
 try {
@@ -125,7 +193,7 @@ try {
             if (!in_array($column['Field'], $allowed, true)) {
                 throw new RuntimeException('Unsupported column: ' . $name . '.' . $column['Field'] . '. Review the sanitization policy.');
             }
-            if (in_array($column['Field'], $keep, true) && !in_array($column['Field'], ['version', 'timezone'], true)
+            if ($profile === 'sanitized' && in_array($column['Field'], $keep, true) && !in_array($column['Field'], ['version', 'timezone'], true)
                 && preg_match('/^(tinyint|smallint|mediumint|int|bigint|date|datetime|timestamp)\b/', $column['Type']) !== 1) {
                 throw new RuntimeException('Unexpected retained column type.');
             }
@@ -157,6 +225,7 @@ try {
         }
     }
     $before = $db->query('SELECT COUNT(*) AS records, COALESCE(SUM(duration), 0) AS seconds FROM kimai2_timesheet')->fetch(PDO::FETCH_ASSOC);
+    $businessBefore = $profile === 'business' && !$verifyOnly ? businessFingerprints($db, $policies, $columns) : null;
     if (!$verifyOnly) {
         $db->beginTransaction();
         foreach ($purge as $name) {
@@ -243,10 +312,13 @@ try {
     if ($before !== $after) {
         throw new RuntimeException('Sanitization changed timesheet counts or duration totals.');
     }
+    if ($businessBefore !== null && $businessBefore !== businessFingerprints($db, $policies, $columns)) {
+        throw new RuntimeException('Credential removal changed business records.');
+    }
     if ($db->inTransaction()) {
         $db->commit();
     }
-    echo 'Sanitization verified: ' . json_encode($after, JSON_THROW_ON_ERROR) . "\n";
+    echo ucfirst($profile) . ' profile verified: ' . json_encode($after, JSON_THROW_ON_ERROR) . "\n";
 } catch (Throwable $error) {
     if ($db->inTransaction()) {
         $db->rollBack();

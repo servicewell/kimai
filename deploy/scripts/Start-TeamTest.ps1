@@ -8,5 +8,6 @@ $seedPath = Join-Path $deployPath 'seeds/team-v1'
 $metadataPath = Join-Path $seedPath 'seed.json'
 if (!(Test-Path -LiteralPath $metadataPath)) { throw 'Download the private team-test package first; see deploy/TEAM-TEST.md.' }
 $metadata = [IO.File]::ReadAllText($metadataPath) | ConvertFrom-Json
-if ($metadata.kind -cne 'kimai-sanitized-seed' -or $metadata.formatVersion -ne 1) { throw 'Unsupported team seed package.' }
-& (Join-Path $PSScriptRoot 'Restore-TestBackup.ps1') -BackupDirectory $seedPath -SkipBuild:$SkipBuild
+if ($metadata.kind -cnotin @('kimai-sanitized-seed', 'kimai-business-seed') -or $metadata.formatVersion -ne 1) { throw 'Unsupported team seed package.' }
+$profile = if ($metadata.kind -ceq 'kimai-business-seed') { 'Business' } else { 'Sanitized' }
+& (Join-Path $PSScriptRoot 'Restore-TestBackup.ps1') -BackupDirectory $seedPath -DataProfile $profile -SkipBuild:$SkipBuild

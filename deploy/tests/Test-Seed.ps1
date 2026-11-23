@@ -1,12 +1,16 @@
 #Requires -Version 7.2
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$SeedDirectory)
+param(
+    [Parameter(Mandatory)][string]$SeedDirectory,
+    [ValidateSet('Sanitized', 'Business')][string]$DataProfile = 'Sanitized'
+)
 
 $ErrorActionPreference = 'Stop'
 $deployPath = Split-Path -Parent $PSScriptRoot
 $composeFile = Join-Path $deployPath 'compose.seed.yaml'
 $environmentFile = Join-Path $deployPath '.env.test'
 $seedPath = (Resolve-Path -LiteralPath $SeedDirectory).ProviderPath
+$profile = $DataProfile.ToLowerInvariant()
 & (Join-Path $deployPath 'scripts/Initialize-Environment.ps1') -Mode Test
 & (Join-Path $deployPath 'scripts/Restore-TestBackup.ps1') -BackupDirectory $seedPath -ValidateOnly
 
@@ -33,18 +37,18 @@ try {
     $started = $true
     Compose -Arguments @('up', '-d', '--wait', 'sqldb')
     Compose -Arguments @('run', '--rm', '--no-deps', 'importer') -Quiet
-    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify-seed')
-    Write-Output 'PASS: Exported seed round-trips with no credentials or enabled accounts'
+    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify-seed', $profile)
+    Write-Output 'PASS: Exported seed round-trips with no account credentials'
 
     $sql = 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=kimai --execute="$1"'
     Compose -Arguments @('exec', '-T', 'sqldb', '/bin/bash', '-euc', $sql, '--', "UPDATE kimai2_users SET password='must-not-be-shared' ORDER BY id LIMIT 1") -Quiet
-    $discarded = & docker --context default compose --project-name kimai-seed-check --env-file $environmentFile -f $composeFile run --rm --no-deps --entrypoint php kimai /restore/Sanitize-TestDatabase.php --verify-seed 2>&1
+    $discarded = & docker --context default compose --project-name kimai-seed-check --env-file $environmentFile -f $composeFile run --rm --no-deps --entrypoint php kimai /restore/Sanitize-TestDatabase.php --verify-seed $profile 2>&1
     if ($LASTEXITCODE -eq 0) { throw 'Seed verification accepted a password leak.' }
     Write-Output 'PASS: Seed verification rejects a retained password'
-    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php')
+    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', $profile)
     $create = 'php -d memory_limit=512M /opt/kimai/bin/console kimai:user:create test-admin test-admin@example.invalid ROLE_SUPER_ADMIN "$TEST_ADMIN_PASSWORD"'
     Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', '/bin/bash', 'kimai', '-euc', $create) -Quiet
-    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify')
+    Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify', $profile)
     Write-Output 'PASS: Restoring developer creates a fresh independently verified administrator'
 } finally {
     try { if ($started) { Compose -Arguments @('down', '--volumes') } } finally {
