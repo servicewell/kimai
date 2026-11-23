@@ -36,6 +36,14 @@ try {
     Write-Output 'PASS: Business records preserved across repeated credential removal'
 
     $sql = 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=kimai --execute="$1"'
+    foreach ($value in @("'fixture-secret'", 'NULL')) {
+        Compose -Arguments @('exec', '-T', 'sqldb', '/bin/bash', '-euc', $sql, '--', "UPDATE kimai2_configuration SET value=$value WHERE name='ldap.connection.password'")
+        $discarded = & docker @command run --rm --no-deps --entrypoint php kimai /restore/Sanitize-TestDatabase.php --verify-seed business 2>&1
+        if ($LASTEXITCODE -eq 0) { throw 'Business verification accepted unclean credential configuration.' }
+        Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--sanitize', 'business')
+        Compose -Arguments @('run', '--rm', '--no-deps', '--entrypoint', 'php', 'kimai', '/restore/Sanitize-TestDatabase.php', '--verify-seed', 'business')
+    }
+    Write-Output 'PASS: Configuration credentials rejected before cleanup and verified after cleanup, including NULL values'
     Compose -Arguments @('exec', '-T', 'sqldb', '/bin/bash', '-euc', $sql, '--', 'ALTER TABLE kimai2_customers ADD unreviewed_secret TEXT')
     $discarded = & docker @command run --rm --no-deps --entrypoint php kimai /restore/Sanitize-TestDatabase.php --verify-seed business 2>&1
     if ($LASTEXITCODE -eq 0) { throw 'Business mode accepted an unreviewed column.' }

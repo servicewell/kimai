@@ -219,17 +219,6 @@ try {
             }
         }
     }
-    if ($profile === 'business' && isset($columns['kimai2_configuration'])) {
-        foreach ($scrubbedConfiguration as $name => $value) {
-            $count = (int) $db->query(
-                'SELECT COUNT(*) FROM `kimai2_configuration` WHERE `name` = ' . $db->quote($name)
-                . ' AND `value` <> ' . $db->quote((string) $value)
-            )->fetchColumn();
-            if ($count !== 0) {
-                throw new RuntimeException('Credential configuration verification failed for ' . $name);
-            }
-        }
-    }
     foreach (['kimai2_users', 'kimai2_customers', 'kimai2_projects', 'kimai2_activities', 'kimai2_timesheet', 'migration_versions'] as $required) {
         if (!isset($columns[$required])) {
             throw new RuntimeException('Backup is missing a required core table.');
@@ -287,6 +276,17 @@ try {
         if ($profile === 'business' && isset($columns['kimai2_configuration'])) {
             foreach ($scrubbedConfiguration as $name => $value) {
                 $db->exec('UPDATE `kimai2_configuration` SET `value` = ' . $db->quote($value) . ' WHERE `name` = ' . $db->quote($name));
+            }
+        }
+    }
+    if ($profile === 'business' && isset($columns['kimai2_configuration'])) {
+        foreach ($scrubbedConfiguration as $name => $value) {
+            $count = (int) $db->query(
+                'SELECT COUNT(*) FROM `kimai2_configuration` WHERE `name` = ' . $db->quote($name)
+                . ' AND NOT (`value` <=> ' . $db->quote((string) $value) . ')'
+            )->fetchColumn();
+            if ($count !== 0) {
+                throw new RuntimeException('Credential configuration verification failed for ' . $name);
             }
         }
     }
