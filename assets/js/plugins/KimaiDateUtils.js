@@ -187,7 +187,7 @@ export default class KimaiDateUtils extends KimaiPlugin {
         }
 
         if (withSeconds) {
-            return duration.toFormat('hh:mm:ss');
+            return duration.toFormat(Math.abs(duration.as('hours')) >= 1 ? 'h:mm:ss' : 'm:ss');
         }
 
         return this.formatLuxonDuration(duration);
