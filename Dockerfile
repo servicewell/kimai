@@ -38,6 +38,19 @@ ARG TIMEZONE="Europe/Berlin"
 FROM composer:latest AS composer
 
 ###########################
+# Frontend assets
+###########################
+
+FROM node:24-alpine AS frontend
+WORKDIR /opt/kimai
+RUN npm install --global pnpm@11.25.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY webpack.config.js ./
+COPY assets/ ./assets/
+RUN pnpm build
+
+###########################
 # PHP extensions
 ###########################
 
@@ -291,6 +304,7 @@ CMD [ "/entrypoint.sh" ]
 FROM base AS dev
 # copy kimai source from local build context (see .dockerignore for what is excluded)
 COPY --chown=www-data:www-data . /opt/kimai
+COPY --from=frontend --chown=www-data:www-data /opt/kimai/public/build/ /opt/kimai/public/build/
 COPY .docker /assets
 # do the composer deps installation
 RUN \
@@ -313,6 +327,7 @@ ENV memory_limit=512M
 FROM base AS prod
 # copy kimai source from local build context (see .dockerignore for what is excluded)
 COPY --chown=www-data:www-data . /opt/kimai
+COPY --from=frontend --chown=www-data:www-data /opt/kimai/public/build/ /opt/kimai/public/build/
 COPY .docker /assets
 # do the composer deps installation
 RUN \

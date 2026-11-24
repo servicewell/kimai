@@ -56,9 +56,10 @@ export default class KimaiActiveRecords extends KimaiPlugin {
         const handle = () => {
             this._updateDuration();
         };
-        this._updatesHandler = setInterval(handle, 10000);
+        this._updatesHandler = setInterval(handle, 1000);
         document.addEventListener('kimai.timesheetUpdate', handle);
         document.addEventListener('kimai.reloadedContent', handle);
+        handle();
     }
 
     // TODO we could unregister all handler and listener
@@ -95,7 +96,7 @@ export default class KimaiActiveRecords extends KimaiPlugin {
         let durations = [];
 
         for (const record of activeRecords) {
-            const duration = DATE.formatDuration(record.dataset['since']);
+            const duration = DATE.formatDuration(record.dataset['since'], true);
             // only use the ones from the menu for the title
             if (record.dataset['replacer'] !== undefined && record.dataset['title'] !== null && duration !== '?') {
                 durations.push(duration);
@@ -180,7 +181,7 @@ export default class KimaiActiveRecords extends KimaiPlugin {
                 link.innerText = timesheet.project.customer.name;
             } else if (replacerName === 'duration') {
                 link.dataset['since'] = timesheet.begin;
-                link.innerText = date.formatDuration(timesheet.duration);
+                link.innerText = date.formatDuration(timesheet.duration, true);
             }
         }
     }
@@ -204,6 +205,11 @@ export default class KimaiActiveRecords extends KimaiPlugin {
      */
     _changeFavicon(running)
     {
+        if (this._faviconRunning === running) {
+            return;
+        }
+        this._faviconRunning = running;
+
         const canvas = document.createElement('canvas');
         const orig = document.getElementById('favicon');
         if (this._favIconUrl === null) {

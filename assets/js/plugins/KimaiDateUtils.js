@@ -173,9 +173,10 @@ export default class KimaiDateUtils extends KimaiPlugin {
 
     /**
      * @param {string|integer|null} since
+     * @param {boolean} withSeconds
      * @return {string}
      */
-    formatDuration(since)
+    formatDuration(since, withSeconds = false)
     {
         let duration;
 
@@ -183,6 +184,10 @@ export default class KimaiDateUtils extends KimaiPlugin {
             duration = DateTime.now().diff(DateTime.fromISO(since));
         } else {
             duration = Duration.fromISO('PT' + (since === null ? 0 : since) + 'S');
+        }
+
+        if (withSeconds) {
+            return duration.toFormat('hh:mm:ss');
         }
 
         return this.formatLuxonDuration(duration);
