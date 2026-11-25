@@ -13,6 +13,7 @@ use App\Entity\Timesheet;
 use App\Repository\Loader\TimesheetLoader;
 use App\Repository\Paginator\LoaderQueryPaginator;
 use App\Repository\Query\TimesheetQuery;
+use App\Timesheet\RunningTimeService;
 use App\Utils\Pagination;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
@@ -34,7 +35,8 @@ final class TimesheetResult
         private readonly TimesheetQuery $timesheetQuery,
         private readonly EntityManagerInterface $entityManager,
         private readonly QueryBuilder $statisticQb,
-        private readonly Query $query
+        private readonly Query $query,
+        private readonly bool $includeRunning = false
     )
     {
     }
@@ -52,8 +54,11 @@ final class TimesheetResult
 
             /** @var array{'duration': int<0, max>, 'counter': int<0, max>} $result */
             $result = $qb->getQuery()->getArrayResult()[0];
-
-            $this->statisticCache = new TimesheetResultStatistic($result['counter'], $result['duration']);
+            $duration = $result['duration'];
+            if ($this->includeRunning) {
+                $duration += array_sum((new RunningTimeService())->getRunningDurationsByDay($qb));
+            }
+            $this->statisticCache = new TimesheetResultStatistic($result['counter'], $duration);
         }
 
         return $this->statisticCache;

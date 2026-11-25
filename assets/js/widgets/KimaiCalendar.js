@@ -641,6 +641,11 @@ export default class KimaiCalendar {
             exported: apiItem.exported,
             start: apiItem.begin,
             end: apiItem.end,
+            begin: apiItem.begin,
+            reportDate: apiItem.begin.slice(0, 10),
+            running: apiItem.end === null,
+            timesheetDuration: apiItem.duration,
+            break: apiItem.break ?? 0,
             activity: apiItem.activity.name,
             project: apiItem.project.name,
             customer: apiItem.project.customer.name,
@@ -744,6 +749,7 @@ export default class KimaiCalendar {
         const DATES = this.kimai.getPlugin('date');
 
         const durations = {};
+        const referenceTime = DateTime.fromISO(this.options.now).toMillis();
 
         if (view === 'timeGridWeek') {
             // make sure we have an entry for every day of the week, even days without timesheets
@@ -754,14 +760,20 @@ export default class KimaiCalendar {
 
         events.forEach(item => {
             const start = DateTime.fromJSDate(item.start).toUTC();
-            const dateStr = start.toFormat('yyyy-MM-dd');
+            const timesheet = this.isKimaiSource(item);
+            const details = item.extendedProps;
+            const dateStr = timesheet ? details.reportDate : start.toFormat('yyyy-MM-dd');
 
             if (!durations[dateStr]) {
                 durations[dateStr] = 0;
             }
 
-            // absences or public holidays are all day
-            if (item.end !== null) {
+            if (timesheet) {
+                const duration = details.running
+                    ? Math.max(0, Math.floor((referenceTime - DateTime.fromISO(details.begin).toMillis()) / 1000) - details.break)
+                    : details.timesheetDuration;
+                durations[dateStr] += duration ?? 0;
+            } else if (item.end !== null) {
                 const end = DateTime.fromJSDate(item.end).toUTC();
                 const duration = end.diff(start, 'hours').as('seconds');
                 durations[dateStr] += duration;

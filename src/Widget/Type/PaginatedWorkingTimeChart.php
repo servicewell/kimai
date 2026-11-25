@@ -130,7 +130,7 @@ final class PaginatedWorkingTimeChart extends AbstractWidget
 
         $yearBegin = $dateTimeFactory->createDateTime(\sprintf('01 january %s 00:00:00', $year));
         $yearEnd = $dateTimeFactory->createDateTime(\sprintf('31 december %s 23:59:59', $year));
-        $yearData = $this->repository->getDurationForTimeRange($yearBegin, $yearEnd, $user);
+        $yearData = $this->repository->getTrackedDurationForTimeRange($yearBegin, $yearEnd, $user);
 
         $financialYearData = null;
         $financialYearBegin = null;
@@ -138,7 +138,7 @@ final class PaginatedWorkingTimeChart extends AbstractWidget
         if (null !== ($financialYear = $this->systemConfiguration->getFinancialYearStart())) {
             $financialYearBegin = $dateTimeFactory->createStartOfFinancialYear($financialYear);
             $financialYearEnd = $dateTimeFactory->createEndOfFinancialYear($financialYearBegin);
-            $financialYearData = $this->repository->getDurationForTimeRange($financialYearBegin, $financialYearEnd, $user);
+            $financialYearData = $this->repository->getTrackedDurationForTimeRange($financialYearBegin, $financialYearEnd, $user);
         }
 
         return [
@@ -148,9 +148,9 @@ final class PaginatedWorkingTimeChart extends AbstractWidget
             'thisMonth' => $thisMonth,
             'lastWeekInYear' => $lastWeekInYear,
             'lastWeekInLastYear' => $lastWeekInLastYear,
-            'day' => $this->repository->getDurationForTimeRange($dayBegin, $dayEnd, $user),
-            'week' => $this->repository->getDurationForTimeRange($weekBegin, $weekEnd, $user),
-            'month' => $this->repository->getDurationForTimeRange($monthBegin, $monthEnd, $user),
+            'day' => $this->repository->getTrackedDurationForTimeRange($dayBegin, $dayEnd, $user),
+            'week' => $this->repository->getTrackedDurationForTimeRange($weekBegin, $weekEnd, $user),
+            'month' => $this->repository->getTrackedDurationForTimeRange($monthBegin, $monthEnd, $user),
             'year' => $yearData,
             'financial' => $financialYearData,
             'financialBegin' => $financialYearBegin,

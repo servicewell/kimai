@@ -36,6 +36,60 @@ use PHPUnit\Framework\Attributes\Group;
 #[Group('integration')]
 class TimesheetRepositoryTest extends AbstractRepositoryTestCase
 {
+    use \App\Tests\Timesheet\RunningTimesheetTestTrait;
+
+    public function testMonitoringKeepsCrossMidnightTimesheetsOnTheirStartDayAfterStopping(): void
+    {
+        [$user, $project, $activity, $running] = $this->createRunningTimesheets();
+        $repository = $this->getEntityManager()->getRepository(Timesheet::class);
+        $begin = new \DateTimeImmutable('2015-07-15 00:00:00 Europe/Stockholm');
+        $end = new \DateTimeImmutable('2015-07-15 23:59:59 Europe/Stockholm');
+        $clock = new \App\Timesheet\RunningTimeService();
+        self::assertSame(3600 + $clock->getDuration($running), $repository->getTrackedDurationForTimeRange($begin, $end, $user));
+        $running->setEnd(new \DateTime('2015-07-16 01:00:00 Europe/Stockholm'));
+        $repository->save($running);
+        self::assertSame(10200, $repository->getTrackedDurationForTimeRange($begin, $end, $user));
+        self::assertSame(3600, $repository->getDurationForTimeRange($begin, $end, $user));
+    }
+
+    public function testRunningTotalsRespectFiltersAndDoNotChangeStoredDurations(): void
+    {
+        [$user, $project, $activity, $running] = $this->createRunningTimesheets();
+        $repository = $this->getEntityManager()->getRepository(Timesheet::class);
+        $clock = new \App\Timesheet\RunningTimeService();
+        $expected = 3600;
+        foreach ($repository->getActiveEntries($user) as $entry) {
+            $expected += $clock->getDuration($entry);
+        }
+        $begin = new \DateTimeImmutable('2015-07-15 00:00:00 Europe/Stockholm');
+        $end = new \DateTimeImmutable('2015-07-16 23:59:59 Europe/Stockholm');
+        self::assertSame(3600, $repository->getDurationForTimeRange($begin, $end, $user));
+        self::assertSame($expected, $repository->getTrackedDurationForTimeRange($begin, $end, $user));
+
+        $query = new TimesheetQuery();
+        $query->setUser($user);
+        $query->setBegin(\DateTime::createFromImmutable($begin));
+        $query->setEnd(\DateTime::createFromImmutable($end));
+        $query->setPageSize(1);
+        self::assertSame(3600, $repository->getTimesheetResult($query)->getStatistic()->getDuration());
+        $result = $repository->getTimesheetResult($query, true);
+        self::assertSame($expected, $result->getStatistic()->getDuration());
+        self::assertSame(3, $result->getStatistic()->getCount());
+        self::assertCount(1, $result->getPagerfanta()->getCurrentPageResults());
+        $query->setState(TimesheetQuery::STATE_STOPPED);
+        self::assertSame(3600, $repository->getTimesheetResult($query, true)->getStatistic()->getDuration());
+        $query->setState(TimesheetQuery::STATE_RUNNING);
+        self::assertSame($expected - 3600, $repository->getTimesheetResult($query, true)->getStatistic()->getDuration());
+
+        self::assertSame(0, $running->getDuration());
+        self::assertNull($running->getEnd());
+
+        $otherRunning = $expected - 3600 - $clock->getDuration($running);
+        $running->setEnd(new \DateTime('2015-07-16 01:00:00 Europe/Stockholm'));
+        $repository->save($running);
+        self::assertSame(3600 + $running->getDuration() + $otherRunning, $repository->getTrackedDurationForTimeRange($begin, $end, $user));
+    }
+
     public function testResultTypeForQueryState(): void
     {
         $em = $this->getEntityManager();

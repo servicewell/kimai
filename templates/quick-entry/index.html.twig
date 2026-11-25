@@ -86,6 +86,13 @@
                 document.querySelector('form[name=quick_entry_form] div.maybe-table-responsive').classList.replace('maybe-table-responsive', 'table-responsive');
             }
 
+            const getInputDuration = (input) => {
+                if (input.value.trim() === '' && input.dataset.runningDuration !== undefined) {
+                    return Number(input.dataset.runningDuration);
+                }
+                return DATES.getSecondsFromDurationString(input.value, input.dataset.durationMode);
+            };
+
             const recalculateTotals = () => {
                 const allFields = document.getElementsByClassName('duration-input');
                 let totalsPerDay = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
@@ -94,7 +101,7 @@
                     // turn a string like "quick_entry_form_rows_16_timesheets_3_duration" into "3"
                     // we can safely use -1 because there are only 0 (monday) to 6 (sunday) indexes
                     let id = durationInput.id.replace(/_duration/, '').slice(-1);
-                    totalsPerDay[id] += DATES.getSecondsFromDurationString(durationInput.value, durationInput.dataset.durationMode);
+                    totalsPerDay[id] += getInputDuration(durationInput);
                 }
                 for (const [id, total] of Object.entries(totalsPerDay)) {
                     document.getElementById('qe-totals-day-' + id).innerText = DATES.formatSeconds(total);
@@ -107,7 +114,7 @@
                     let qeWeekRowFields = qeWeekRow.getElementsByClassName('duration-input');
                     let totalsRow = 0;
                     for (let durationInput of qeWeekRowFields) {
-                        totalsRow += DATES.getSecondsFromDurationString(durationInput.value, durationInput.dataset.durationMode);
+                        totalsRow += getInputDuration(durationInput);
                     }
                     qeWeekRow.getElementsByClassName('qe-totals-row')[0].innerText = DATES.formatSeconds(totalsRow);
                 }

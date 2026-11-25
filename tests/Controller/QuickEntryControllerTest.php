@@ -27,6 +27,34 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 #[Group('integration')]
 class QuickEntryControllerTest extends AbstractControllerBaseTestCase
 {
+    use \App\Tests\Timesheet\RunningTimesheetTestTrait;
+
+    public function testRunningTimeIsAvailableForTotalsWithoutSubmittingItAsDuration(): void
+    {
+        $client = $this->getClientForAuthenticatedUser(User::ROLE_SUPER_ADMIN);
+        [$user, $project, $activity, $running] = $this->createRunningTimesheets();
+        $url = '/quick_entry/?date=2015-07-15&user=' . $user->getId();
+        $this->assertAccessIsGranted($client, $url);
+        $inputs = $client->getCrawler()->filter('input[data-running-duration]');
+        self::assertCount(2, $inputs);
+        $durations = $inputs->each(static fn ($input) => (int) $input->attr('data-running-duration'));
+        self::assertContains((new \App\Timesheet\RunningTimeService())->getDuration($running), $durations);
+        foreach ($inputs as $input) {
+            self::assertInstanceOf(\DOMElement::class, $input);
+            self::assertSame('', $input->getAttribute('value'));
+        }
+
+        $values = $client->getCrawler()->filter('form[name=quick_entry_form]')->form()->getPhpValues();
+        $client->request('POST', $this->createUrl($url), $values);
+        self::assertTrue($client->getResponse()->isRedirect());
+        $em = $this->getEntityManager();
+        $em->clear();
+        $saved = $em->getRepository(Timesheet::class)->find($running->getId());
+        self::assertNotNull($saved);
+        self::assertNull($saved->getEnd());
+        self::assertSame(0, $saved->getDuration() ?? 0);
+    }
+
     public function testIsSecure(): void
     {
         $this->assertUrlIsSecured('/quick_entry/');

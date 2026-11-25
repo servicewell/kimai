@@ -13,6 +13,7 @@ use App\Configuration\LocaleService;
 use App\Constants;
 use App\Entity\Timesheet;
 use App\Entity\User;
+use App\Timesheet\RunningTimeService;
 use App\Utils\FormFormatConverter;
 use App\Utils\JavascriptFormatConverter;
 use App\Utils\LocaleFormatter;
@@ -30,7 +31,7 @@ final class LocaleFormatExtensions extends AbstractExtension implements LocaleAw
     private ?LocaleFormatter $formatter = null;
     private ?string $locale = null;
 
-    public function __construct(private readonly LocaleService $localeService)
+    public function __construct(private readonly LocaleService $localeService, private readonly RunningTimeService $runningTime = new RunningTimeService())
     {
     }
 
@@ -77,6 +78,7 @@ final class LocaleFormatExtensions extends AbstractExtension implements LocaleAw
         return [
             new TwigFunction('javascript_configurations', [$this, 'getJavascriptConfiguration']),
             new TwigFunction('create_date', [$this, 'createDate']),
+            new TwigFunction('timesheet_duration', [$this->runningTime, 'getDuration']),
             new TwigFunction('month_names', [$this, 'getMonthNames']),
             new TwigFunction('locale_format', [$this, 'getLocaleFormat']),
         ];

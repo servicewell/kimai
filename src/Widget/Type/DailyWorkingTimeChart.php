@@ -16,6 +16,7 @@ use App\Entity\User;
 use App\Model\Statistic\Day;
 use App\Repository\TimesheetRepository;
 use App\Timesheet\DateTimeFactory;
+use App\Timesheet\RunningTimeService;
 use App\Widget\WidgetInterface;
 use DateTime;
 use DateTimeInterface;
@@ -25,7 +26,7 @@ use DateTimeInterface;
  */
 final class DailyWorkingTimeChart extends AbstractWidget
 {
-    public function __construct(private readonly TimesheetRepository $repository)
+    public function __construct(private readonly TimesheetRepository $repository, private readonly RunningTimeService $runningTime = new RunningTimeService())
     {
     }
 
@@ -140,7 +141,6 @@ final class DailyWorkingTimeChart extends AbstractWidget
         $qb->select('t, p, a, c')
             ->andWhere($qb->expr()->between('t.date', ':begin', ':end'))
             ->andWhere($qb->expr()->eq('t.user', ':user'))
-            ->andWhere($qb->expr()->isNotNull('t.end'))
             ->setParameter('begin', $begin->format('Y-m-d'))
             ->setParameter('end', $end->format('Y-m-d'))
             ->setParameter('user', $user)
@@ -169,7 +169,7 @@ final class DailyWorkingTimeChart extends AbstractWidget
                     'details' => []
                 ];
             }
-            $duration = $result->getDuration() ?? 0;
+            $duration = $this->runningTime->getDuration($result);
 
             $results[$dateKey]['duration'] += $duration;
             if ($result->isBillable()) {

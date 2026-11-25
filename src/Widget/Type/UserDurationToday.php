@@ -44,7 +44,7 @@ final class UserDurationToday extends AbstractCounterDuration
     public function getData(array $options = []): mixed
     {
         try {
-            return $this->repository->getDurationForTimeRange($this->createTodayStartDate(), $this->createTodayEndDate(), $this->getUser());
+            return $this->repository->getTrackedDurationForTimeRange($this->createTodayStartDate(), $this->createTodayEndDate(), $this->getUser());
         } catch (\Exception $ex) {
             throw new WidgetException(
                 'Failed loading widget data: ' . $ex->getMessage()
