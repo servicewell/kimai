@@ -67,7 +67,7 @@ final class ContractController extends AbstractController
         $yearDate = $values->getDate();
         // make sure we use the correct datetime for the selected user
         $yearDate = $this->getDateTimeFactory($profile)->createStartOfYear($yearDate);
-        $year = $workingTimeService->getYear($profile, $yearDate, $now);
+        $year = $workingTimeService->getYearForDisplay($profile, $yearDate, $now);
 
         $page = new PageSetup('work_times');
         $page->setHelp('contract.html');

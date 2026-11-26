@@ -56,7 +56,7 @@
                 {% set dayHourlyRate = null %}
             {% endif %}
         {% endif %}
-        {%- set dayDuration = dayDuration + entry.duration -%}
+        {%- set dayDuration = dayDuration + (includeRunning|default(false) ? timesheet_duration(entry) : entry.duration) -%}
         {% set lastEntry = entry %}
     {% endfor %}
     {% if showSummary %}

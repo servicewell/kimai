@@ -81,6 +81,8 @@ Before replacing an existing installation, take a database/files backup and rest
 
 From a checkout using this layout, update the source with `git pull --ff-only`, then run `docker compose up -d --build --wait` from `deploy/`.
 
+The Docker build compiles frontend assets from `assets/` in a separate Node stage using the pnpm lockfile. Both application targets use these freshly built files and their matching integrity metadata, rather than the prebuilt files in the checkout. JavaScript changes therefore require rebuilding the image and recreating the application container. The checkout's `public/build/` stays unchanged.
+
 MariaDB now uses the `mariadb` volume key, separate from the earlier `mysql` volume. Existing `kimai-local_mysql` and `kimai-production_mysql` volumes remain intact. Do not attach an existing MySQL data directory to MariaDB. An existing installation needs a reviewed logical dump/import migration before switching engines; simply starting this configuration creates an empty MariaDB database. Generating new environment passwords does not update credentials stored in an existing database volume.
 
 For a machine that runs an earlier Docker workspace, keep its running configuration until that migration is prepared. Preserve private environment, metadata and TLS files locally, and retain the original volumes until the migration is verified.

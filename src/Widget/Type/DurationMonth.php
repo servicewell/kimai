@@ -49,7 +49,7 @@ final class DurationMonth extends AbstractCounterDuration
     public function getData(array $options = []): mixed
     {
         try {
-            return $this->repository->getDurationForTimeRange($this->createMonthStartDate(), $this->createMonthEndDate(), null);
+            return $this->repository->getTrackedDurationForTimeRange($this->createMonthStartDate(), $this->createMonthEndDate(), null);
         } catch (\Exception $ex) {
             throw new WidgetException(
                 'Failed loading widget data: ' . $ex->getMessage()

@@ -97,7 +97,7 @@ class LocaleFormatExtensionsTest extends TestCase
 
     public function testGetFunctions(): void
     {
-        $functions = ['javascript_configurations', 'create_date', 'month_names', 'locale_format'];
+        $functions = ['javascript_configurations', 'create_date', 'timesheet_duration', 'month_names', 'locale_format'];
         $i = 0;
 
         $sut = $this->getSut('de', []);

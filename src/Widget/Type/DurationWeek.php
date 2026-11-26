@@ -49,7 +49,7 @@ final class DurationWeek extends AbstractCounterDuration
     public function getData(array $options = []): mixed
     {
         try {
-            return $this->repository->getDurationForTimeRange($this->createWeekStartDate(), $this->createWeekEndDate(), null);
+            return $this->repository->getTrackedDurationForTimeRange($this->createWeekStartDate(), $this->createWeekEndDate(), null);
         } catch (\Exception $ex) {
             throw new WidgetException(
                 'Failed loading widget data: ' . $ex->getMessage()

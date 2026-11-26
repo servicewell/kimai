@@ -66,7 +66,8 @@ abstract class TimesheetAbstractController extends AbstractController
 
         $this->prepareQuery($query);
 
-        $result = $this->repository->getTimesheetResult($query);
+        $includeRunning = $location === TimesheetMetaDisplayEvent::TIMESHEET;
+        $result = $this->repository->getTimesheetResult($query, $includeRunning);
         $metaColumns = $this->findMetaColumns($query, $location);
 
         $table = new DataTable($this->getTableName(), $query);
@@ -123,6 +124,7 @@ abstract class TimesheetAbstractController extends AbstractController
             'action_single' => $this->getActionNameSingle(),
             'stats' => $result->getStatistic(),
             'showSummary' => $this->includeSummary(),
+            'includeRunning' => $includeRunning,
             'metaColumns' => $metaColumns,
             'allowMarkdown' => $this->hasMarkdownSupport(),
             'editRoute' => $this->getEditRoute()

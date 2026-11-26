@@ -93,9 +93,7 @@ final class Month extends BaseMonth
         $time = 0;
 
         foreach ($this->getDays() as $day) {
-            if ($day->getWorkingTime() !== null) {
-                $time += $day->getWorkingTime()->getActualTime();
-            }
+            $time += $day->getActualTime();
         }
 
         return $time;

@@ -15,6 +15,7 @@ use App\Model\Day as BaseDay;
 final class Day extends BaseDay
 {
     private ?WorkingTime $workingTime = null;
+    private int $runningDuration = 0;
     /** @var array<DayAddon> */
     private array $addons = [];
 
@@ -35,6 +36,16 @@ final class Day extends BaseDay
     public function setWorkingTime(?WorkingTime $workingTime): void
     {
         $this->workingTime = $workingTime;
+    }
+
+    public function setRunningDuration(int $runningDuration): void
+    {
+        $this->runningDuration = $runningDuration;
+    }
+
+    public function getActualTime(): int
+    {
+        return ($this->workingTime?->getActualTime() ?? 0) + ($this->isLocked() ? 0 : $this->runningDuration);
     }
 
     /**

@@ -32,7 +32,11 @@
 {%- endblock choice_widget_expanded %}
 
 {% block _quick_entry_form_rows_entry_timesheets_entry_widget %}
-    {{ form_row(form.duration, {row_attr: {class: 'p-0'}}) }}
+    {% set durationAttr = form.duration.vars.attr %}
+    {% if form.vars.data is not null and form.vars.data.id is not null and form.vars.data.running %}
+        {% set durationAttr = durationAttr|merge({'data-running-duration': timesheet_duration(form.vars.data)}) %}
+    {% endif %}
+    {{ form_row(form.duration, {row_attr: {class: 'p-0'}, attr: durationAttr}) }}
 {%- endblock %}
 
 {% block _quick_entry_form_rows_entry_metaFields_entry_widget %}

@@ -30,6 +30,7 @@ use App\Repository\Query\TimesheetQueryHint;
 use App\Repository\Result\TimesheetResult;
 use App\Repository\Search\SearchConfiguration;
 use App\Repository\Search\SearchHelper;
+use App\Timesheet\RunningTimeService;
 use App\Utils\Pagination;
 use DateInterval;
 use DateTime;
@@ -199,6 +200,27 @@ class TimesheetRepository extends EntityRepository
         }
 
         return (int) $tmp;
+    }
+
+    public function getTrackedDurationForTimeRange(?\DateTimeInterface $begin, ?\DateTimeInterface $end, ?User $user): int
+    {
+        $qb = $this->createQueryBuilder('t');
+        if ($begin !== null) {
+            $qb->andWhere('t.begin >= :from')->setParameter('from', $begin);
+        }
+        if ($end !== null) {
+            $qb->andWhere('t.begin <= :to')->setParameter('to', $end);
+        }
+        if ($user !== null) {
+            $qb->andWhere('t.user = :user')->setParameter('user', $user);
+        }
+
+        $stopped = clone $qb;
+        $duration = $stopped->select('COALESCE(SUM(t.duration), 0)')
+            ->andWhere('t.end IS NOT NULL')
+            ->getQuery()->getSingleScalarResult();
+
+        return (int) $duration + array_sum((new RunningTimeService())->getRunningDurationsByDay($qb));
     }
 
     /**
@@ -582,13 +604,14 @@ class TimesheetRepository extends EntityRepository
         return $this->getHydratedResultsByQuery($qb, $query);
     }
 
-    public function getTimesheetResult(TimesheetQuery $query): TimesheetResult
+    public function getTimesheetResult(TimesheetQuery $query, bool $includeRunning = false): TimesheetResult
     {
         return new TimesheetResult(
             $query,
             $this->getEntityManager(),
             $this->getQueryBuilderForQuery($query),
-            $this->createTimesheetQuery($query)
+            $this->createTimesheetQuery($query),
+            $includeRunning
         );
     }
 

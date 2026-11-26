@@ -20,11 +20,13 @@ use App\Repository\TimesheetRepository;
 use App\Repository\UserRepository;
 use App\Repository\WorkingTimeRepository;
 use App\Timesheet\DateTimeFactory;
+use App\Timesheet\RunningTimeService;
 use App\WorkingTime\Mode\WorkingTimeMode;
 use App\WorkingTime\Mode\WorkingTimeModeFactory;
 use App\WorkingTime\Model\Month;
 use App\WorkingTime\Model\Year;
 use App\WorkingTime\Model\YearPerUserSummary;
+use Doctrine\ORM\QueryBuilder;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -43,6 +45,7 @@ class WorkingTimeService
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly WorkingTimeModeFactory $contractModeService,
         private readonly UserRepository $userRepository,
+        private readonly RunningTimeService $runningTime = new RunningTimeService(),
     )
     {
     }
@@ -176,6 +179,23 @@ class WorkingTimeService
         return $year;
     }
 
+    public function getYearForDisplay(User $user, \DateTimeInterface $yearDate, \DateTimeInterface $until): Year
+    {
+        $year = $this->getYear($user, $yearDate, $until);
+        $runningDurations = $this->runningTime->getRunningDurationsByDay($this->createYearStatisticsQuery($yearDate, $user, true));
+
+        foreach ($year->getMonths() as $month) {
+            foreach ($month->getDays() as $day) {
+                $dayDate = $day->getDay();
+                if ($dayDate <= $until && !$day->isLocked()) {
+                    $day->setRunningDuration($runningDurations[$dayDate->format('Y-m-d')] ?? 0);
+                }
+            }
+        }
+
+        return $year;
+    }
+
     public function getMonth(User $user, \DateTimeInterface $monthDate, \DateTimeInterface $until): Month
     {
         // uses the year, because that triggers the required events to collect all different working times
@@ -241,6 +261,19 @@ class WorkingTimeService
      */
     private function getYearStatistics(\DateTimeInterface $year, User $user): array
     {
+        /** @var array<array{day: string, duration: int|string}> $results */
+        $results = $this->createYearStatisticsQuery($year, $user)->getQuery()->getResult();
+
+        $durations = [];
+        foreach ($results as $row) {
+            $durations[$row['day']] = (int) $row['duration'];
+        }
+
+        return $durations;
+    }
+
+    private function createYearStatisticsQuery(\DateTimeInterface $year, User $user, bool $running = false): QueryBuilder
+    {
         $dateTimeFactory = DateTimeFactory::createByUser($user);
         $begin = $dateTimeFactory->createStartOfYear($year);
         $end = $dateTimeFactory->createEndOfYear($year);
@@ -250,7 +283,7 @@ class WorkingTimeService
         $qb
             ->select('COALESCE(SUM(t.duration), 0) as duration')
             ->addSelect('DATE(t.date) as day')
-            ->where($qb->expr()->isNotNull('t.end'))
+            ->where($running ? $qb->expr()->isNull('t.end') : $qb->expr()->isNotNull('t.end'))
             ->andWhere($qb->expr()->between('t.date', ':begin', ':end'))
             ->andWhere($qb->expr()->eq('t.user', ':user'))
             ->setParameter('begin', $begin->format('Y-m-d'))
@@ -262,13 +295,6 @@ class WorkingTimeService
         $event = new WorkingTimeQueryStatsEvent($qb, $user, $begin, $end);
         $this->eventDispatcher->dispatch($event);
 
-        $results = $qb->getQuery()->getResult();
-
-        $durations = [];
-        foreach ($results as $row) {
-            $durations[$row['day']] = (int) $row['duration'];
-        }
-
-        return $durations;
+        return $qb;
     }
 }

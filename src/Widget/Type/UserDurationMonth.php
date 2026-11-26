@@ -44,7 +44,7 @@ final class UserDurationMonth extends AbstractCounterDuration
     public function getData(array $options = []): mixed
     {
         try {
-            return $this->repository->getDurationForTimeRange($this->createMonthStartDate(), $this->createMonthEndDate(), $this->getUser());
+            return $this->repository->getTrackedDurationForTimeRange($this->createMonthStartDate(), $this->createMonthEndDate(), $this->getUser());
         } catch (\Exception $ex) {
             throw new WidgetException(
                 'Failed loading widget data: ' . $ex->getMessage()

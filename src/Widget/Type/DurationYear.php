@@ -39,7 +39,7 @@ final class DurationYear extends AbstractCounterYear
     protected function getYearData(\DateTimeInterface $begin, \DateTimeInterface $end, array $options = []): mixed
     {
         try {
-            return $this->repository->getDurationForTimeRange($begin, $end, null);
+            return $this->repository->getTrackedDurationForTimeRange($begin, $end, null);
         } catch (\Exception $ex) {
             throw new WidgetException(
                 'Failed loading widget data: ' . $ex->getMessage()

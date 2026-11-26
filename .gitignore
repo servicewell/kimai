@@ -12,7 +12,7 @@
 # local rules
 /config/packages/local.yaml
 /config/bundles-local.php
-
+/.vs
 # frontend
 /.yarnrc.yml
 /.yarn
