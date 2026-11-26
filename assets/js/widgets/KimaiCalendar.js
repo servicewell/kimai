@@ -642,7 +642,6 @@ export default class KimaiCalendar {
             start: apiItem.begin,
             end: apiItem.end,
             begin: apiItem.begin,
-            reportDate: apiItem.begin.slice(0, 10),
             running: apiItem.end === null,
             timesheetDuration: apiItem.duration,
             break: apiItem.break ?? 0,
@@ -726,6 +725,7 @@ export default class KimaiCalendar {
 
         const updateUrl = this.options.url.update(event.id);
         API.patch(updateUrl, JSON.stringify(payload), () => {
+            event.source?.refetch();
             document.dispatchEvent(new CustomEvent('kimai.reloadedContent'));
         }, (error) => {
             eventArg.revert();
@@ -762,7 +762,7 @@ export default class KimaiCalendar {
             const start = DateTime.fromJSDate(item.start).toUTC();
             const timesheet = this.isKimaiSource(item);
             const details = item.extendedProps;
-            const dateStr = timesheet ? details.reportDate : start.toFormat('yyyy-MM-dd');
+            const dateStr = timesheet ? item.startStr.slice(0, 10) : start.toFormat('yyyy-MM-dd');
 
             if (!durations[dateStr]) {
                 durations[dateStr] = 0;

@@ -128,6 +128,7 @@ class Timesheet implements EntityWithMetaFields, ExportableItem, ModifiedAt
      * @internal for storing the localized state of dates (see $timezone)
      */
     private bool $localized = false;
+    private bool $timeRoundingEnabled = true;
     #[ORM\Column(name: 'duration', type: Types::INTEGER, nullable: true)]
     #[Serializer\Expose]
     #[Serializer\Groups(['Default'])]
@@ -360,6 +361,16 @@ class Timesheet implements EntityWithMetaFields, ExportableItem, ModifiedAt
         }
 
         return null;
+    }
+
+    public function isTimeRoundingEnabled(): bool
+    {
+        return $this->timeRoundingEnabled;
+    }
+
+    public function setTimeRoundingEnabled(bool $enabled): void
+    {
+        $this->timeRoundingEnabled = $enabled;
     }
 
     public function getBreak(): int

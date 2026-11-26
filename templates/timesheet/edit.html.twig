@@ -6,7 +6,7 @@
         {{ alert('warning', ('timesheet.locked.warning'|trans({}, 'flashmessages')), null, 'warning') }}
     {% endif %}
     {% set formOptions = {
-        'template': kimai_context.modalRequest ? 'default/_form_modal.html.twig' : 'default/_form.html.twig',
+        'template': kimai_context.modalRequest ? 'timesheet/_form_modal.html.twig' : 'default/_form.html.twig',
         'title': (timesheet.id ? 'timesheet.edit'|trans : 'create'|trans),
         'form': form
     } %}

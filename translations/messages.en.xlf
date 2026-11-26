@@ -1906,6 +1906,14 @@
         <source>copy</source>
         <target>Create copy</target>
       </trans-unit>
+      <trans-unit id="split_timesheet" resname="split_timesheet">
+        <source>Split</source>
+        <target>Split</target>
+      </trans-unit>
+      <trans-unit id="continue_to_work_on" resname="continue_to_work_on">
+        <source>Continue to work on</source>
+        <target>Continue to work on</target>
+      </trans-unit>
       <trans-unit id="TqFAWIF" resname="home">
         <source>home</source>
         <target>Homepage</target>

@@ -1,0 +1,11 @@
+{% extends 'default/_form_modal.html.twig' %}
+
+{% block modal_footer %}
+    {% if timesheet.id is not null and is_granted('delete', timesheet) %}
+        <button type="button" class="btn btn-outline-danger me-auto api-link"
+                data-href="{{ path('delete_timesheet', {id: timesheet.id}) }}" data-method="DELETE"
+                data-question="confirm.delete" data-msg-error="action.delete.error"
+                data-event="kimai.timesheetDelete" data-close-modal="true">{{ 'delete'|trans }}</button>
+    {% endif %}
+    {{ parent() }}
+{% endblock %}

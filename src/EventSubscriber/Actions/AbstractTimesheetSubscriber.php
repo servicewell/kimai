@@ -11,12 +11,20 @@ namespace App\EventSubscriber\Actions;
 
 use App\Entity\Timesheet;
 use App\Event\PageActionsEvent;
+use App\Timesheet\TimesheetService;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
  * @internal
  */
 abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
 {
+    public function __construct(AuthorizationCheckerInterface $auth, UrlGeneratorInterface $urlGenerator, private readonly TimesheetService $timesheetService)
+    {
+        parent::__construct($auth, $urlGenerator);
+    }
+
     protected function timesheetActions(PageActionsEvent $event, string $routeEdit, string $routeDuplicate): void
     {
         $payload = $event->getPayload();
@@ -29,7 +37,19 @@ abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
             }
 
             if (!$timesheet->isRunning() && $this->isGranted('start', $timesheet)) {
-                $event->addAction('repeat', ['title' => 'repeat', 'url' => '#', 'class' => 'api-link dd-ts-repeat', 'attr' => ['data-payload' => '{"copy": "all"}', 'data-event' => 'kimai.timesheetStart kimai.timesheetUpdate', 'data-href' => $this->path('restart_timesheet', ['id' => $timesheet->getId()]), 'data-method' => 'PATCH', 'data-msg-error' => 'timesheet.start.error', 'data-msg-success' => 'timesheet.start.success']]);
+                $event->addAction('repeat', [
+                    'title' => $event->isView('calendar') ? 'continue_to_work_on' : 'repeat',
+                    'url' => '#',
+                    'class' => 'api-link dd-ts-repeat',
+                    'attr' => [
+                        'data-payload' => '{"copy": "all"}',
+                        'data-event' => 'kimai.timesheetStart kimai.timesheetUpdate',
+                        'data-href' => $this->path('restart_timesheet', ['id' => $timesheet->getId()]),
+                        'data-method' => 'PATCH',
+                        'data-msg-error' => 'timesheet.start.error',
+                        'data-msg-success' => 'timesheet.start.success',
+                    ],
+                ]);
             }
 
             if ($this->isGranted('edit', $timesheet)) {
@@ -39,6 +59,21 @@ abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
             if ($this->isGranted('duplicate', $timesheet)) {
                 $class = $event->isView('edit') ? '' : 'modal-ajax-form';
                 $event->addAction('copy', ['title' => 'copy', 'url' => $this->path($routeDuplicate, ['id' => $timesheet->getId()]), 'class' => $class . ' dd-ts-duplicate']);
+            }
+
+            if ($event->isView('calendar') && $this->timesheetService->canSplitTimesheet($timesheet)) {
+                $event->addAction('split_timesheet', [
+                    'url' => $this->path('split_timesheet', ['id' => $timesheet->getId()]),
+                    'class' => 'api-link dd-ts-split',
+                    'attr' => [
+                        'data-event' => 'kimai.timesheetUpdate',
+                        'data-method' => 'PATCH',
+                        'data-payload' => json_encode([
+                            'begin' => $timesheet->getBegin()?->getTimestamp(),
+                            'end' => $timesheet->getEnd()?->getTimestamp(),
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ]);
             }
 
             if ($event->countActions() > 0) {

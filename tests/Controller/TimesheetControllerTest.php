@@ -664,6 +664,37 @@ class TimesheetControllerTest extends AbstractControllerBaseTestCase
         self::assertEquals('Some text"><bold>HelloWorld</bold>', $timesheet->getDescription());
     }
 
+    public function testEditModalCanDeleteAnExistingRecord(): void
+    {
+        $client = $this->getClientForAuthenticatedUser();
+        $fixture = new TimesheetFixtures();
+        $fixture->setAmount(1);
+        $fixture->setUser($this->getUserByRole(User::ROLE_USER));
+        $id = $this->importFixture($fixture)[0]->getId();
+        $headers = ['HTTP_X_REQUESTED_WITH' => 'Kimai-Modal'];
+
+        $client->request('GET', $this->createUrl('/timesheet/create'), [], [], $headers);
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists('.modal-footer [data-method="DELETE"]');
+
+        $client->request('GET', $this->createUrl('/timesheet/' . $id . '/edit'), [], [], $headers);
+        self::assertResponseIsSuccessful();
+        $delete = $client->getCrawler()->filter('.modal-footer')->children()->first();
+        self::assertSame('button', $delete->nodeName());
+        self::assertSame('button', $delete->attr('type'));
+        self::assertSame('Delete', $delete->text());
+        self::assertStringContainsString('me-auto', (string) $delete->attr('class'));
+        self::assertSame('confirm.delete', $delete->attr('data-question'));
+        self::assertSame('DELETE', $delete->attr('data-method'));
+        self::assertSame('kimai.timesheetDelete', $delete->attr('data-event'));
+        self::assertSame('true', $delete->attr('data-close-modal'));
+        $url = $delete->attr('data-href');
+        self::assertSame('/api/timesheets/' . $id, $url);
+
+        $client->request('DELETE', $url);
+        self::assertResponseStatusCodeSame(204);
+    }
+
     public function testEditAction(): void
     {
         $client = $this->getClientForAuthenticatedUser();

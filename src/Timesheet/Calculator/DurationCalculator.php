@@ -31,7 +31,9 @@ final class DurationCalculator implements CalculatorInterface
         $duration = $record->getCalculatedDuration();
         $record->setDuration($duration);
 
-        $this->roundings->applyRoundings($record);
+        if ($record->isTimeRoundingEnabled()) {
+            $this->roundings->applyRoundings($record);
+        }
     }
 
     public function getPriority(): int

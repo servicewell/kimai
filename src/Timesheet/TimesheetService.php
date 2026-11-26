@@ -33,6 +33,8 @@ use App\Validator\ValidationFailedException;
 use InvalidArgumentException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Validator\ConstraintViolation;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
@@ -159,6 +161,78 @@ final class TimesheetService
         } else {
             return $this->updateTimesheet($timesheet); // @phpstan-ignore method.deprecated
         }
+    }
+
+    public function canSplitTimesheet(Timesheet $timesheet): bool
+    {
+        $begin = $timesheet->getBegin();
+        $end = $timesheet->getEnd();
+
+        // A fixed fee applies per record. Splitting would charge it twice.
+        return $begin !== null && $end !== null && $end->getTimestamp() - $begin->getTimestamp() >= 2
+            && !$timesheet->isExported() && $timesheet->getFixedRate() === null
+            && $this->getActiveTrackingMode()->canUpdateTimesWithAPI()
+            && $this->auth->isGranted('edit', $timesheet) && $this->auth->isGranted('create', $timesheet);
+    }
+
+    public function splitTimesheet(int $id, int $expectedBegin, int $expectedEnd): void
+    {
+        [$first, $second] = $this->repository->updateWithLock($id, function (?Timesheet $first) use ($expectedBegin, $expectedEnd): array {
+            if ($first === null) {
+                throw new NotFoundHttpException('Timesheet not found');
+            }
+
+            $begin = $first->getBegin();
+            $end = $first->getEnd();
+            if ($begin === null || $end === null || !$this->canSplitTimesheet($first)) {
+                throw new AccessDeniedException('You cannot split this timesheet');
+            }
+
+            if ($begin->getTimestamp() !== $expectedBegin || $end->getTimestamp() !== $expectedEnd) {
+                throw new ConflictHttpException('The timesheet changed. Open the calendar menu again to split it.');
+            }
+
+            $midpoint = (clone $begin)->setTimestamp($expectedBegin + intdiv($expectedEnd - $expectedBegin, 2));
+            $break = $first->getBreak();
+            $firstBreak = intdiv($break, 2);
+            $second = clone $first;
+            $first->setEnd($midpoint)->setDuration(null);
+            $first->setBreak($firstBreak);
+            $second->setBegin(clone $midpoint)->setEnd(clone $end)->setDuration(null);
+            $second->setBreak($break - $firstBreak);
+
+            if (!$this->auth->isGranted('create', $second)) {
+                throw new AccessDeniedException('You cannot create the second half of this timesheet');
+            }
+
+            // Preserve the exact shared boundary even when the configured start and end rounding differ.
+            $first->setTimeRoundingEnabled(false);
+            $second->setTimeRoundingEnabled(false);
+            try {
+                $this->validateTimesheet($first);
+                $this->fixTimezone($first);
+                $this->dispatcher->dispatch(new TimesheetUpdatePreEvent($first));
+                $this->repository->save($first);
+
+                // Validate against the shortened original so overlap and budget checks see the new interval.
+                $this->validateTimesheet($second);
+                $this->fixTimezone($second);
+                $this->dispatcher->dispatch(new TimesheetCreatePreEvent($second));
+                $this->repository->save($second);
+
+                if ($first->getFixedRate() !== null || $second->getFixedRate() !== null) {
+                    throw new ConflictHttpException('A fixed fee now applies to this timesheet.');
+                }
+            } finally {
+                $first->setTimeRoundingEnabled(true);
+                $second->setTimeRoundingEnabled(true);
+            }
+
+            return [$first, $second];
+        });
+
+        $this->dispatcher->dispatch(new TimesheetUpdatePostEvent($first));
+        $this->dispatcher->dispatch(new TimesheetCreatePostEvent($second));
     }
 
     /**
