@@ -1782,6 +1782,10 @@
         <source>Split</source>
         <target state="translated">Dela</target>
       </trans-unit>
+      <trans-unit id="continue_to_work_on" resname="continue_to_work_on">
+        <source>Continue to work on</source>
+        <target state="translated">Fortsätt arbeta med</target>
+      </trans-unit>
       <trans-unit id="TqFAWIF" resname="home">
         <source>home</source>
         <target state="translated">Hemsida</target>

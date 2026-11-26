@@ -1910,6 +1910,10 @@
         <source>Split</source>
         <target>Split</target>
       </trans-unit>
+      <trans-unit id="continue_to_work_on" resname="continue_to_work_on">
+        <source>Continue to work on</source>
+        <target>Continue to work on</target>
+      </trans-unit>
       <trans-unit id="TqFAWIF" resname="home">
         <source>home</source>
         <target>Homepage</target>

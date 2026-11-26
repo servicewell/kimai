@@ -37,7 +37,19 @@ abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
             }
 
             if (!$timesheet->isRunning() && $this->isGranted('start', $timesheet)) {
-                $event->addAction('repeat', ['title' => 'repeat', 'url' => '#', 'class' => 'api-link dd-ts-repeat', 'attr' => ['data-payload' => '{"copy": "all"}', 'data-event' => 'kimai.timesheetStart kimai.timesheetUpdate', 'data-href' => $this->path('restart_timesheet', ['id' => $timesheet->getId()]), 'data-method' => 'PATCH', 'data-msg-error' => 'timesheet.start.error', 'data-msg-success' => 'timesheet.start.success']]);
+                $event->addAction('repeat', [
+                    'title' => $event->isView('calendar') ? 'continue_to_work_on' : 'repeat',
+                    'url' => '#',
+                    'class' => 'api-link dd-ts-repeat',
+                    'attr' => [
+                        'data-payload' => '{"copy": "all"}',
+                        'data-event' => 'kimai.timesheetStart kimai.timesheetUpdate',
+                        'data-href' => $this->path('restart_timesheet', ['id' => $timesheet->getId()]),
+                        'data-method' => 'PATCH',
+                        'data-msg-error' => 'timesheet.start.error',
+                        'data-msg-success' => 'timesheet.start.success',
+                    ],
+                ]);
             }
 
             if ($this->isGranted('edit', $timesheet)) {

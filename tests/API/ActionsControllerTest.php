@@ -60,6 +60,8 @@ class ActionsControllerTest extends APIControllerBaseTestCase
 
             self::assertIsArray($result);
             self::assertSame($entries, array_column($result, 'id'));
+            self::assertIsArray($result[0]);
+            self::assertSame($view === 'calendar' ? 'Continue to work on' : 'Start again', $result[0]['title']);
             if ($view === 'calendar') {
                 $split = $result[3];
                 self::assertIsArray($split);
@@ -74,6 +76,50 @@ class ActionsControllerTest extends APIControllerBaseTestCase
                 self::assertApiResponseTypeStructure('PageActionItem', $item);
             }
         }
+    }
+
+    public function testCalendarContinueActionStartsNewTimer(): void
+    {
+        $client = $this->getClientForAuthenticatedUser(User::ROLE_USER);
+        $fixture = new TimesheetFixtures($this->getUserByRole(User::ROLE_USER), 1);
+        $fixture->setStartDate(new \DateTime('-3 days'));
+        [$original] = $this->importFixture($fixture);
+        $this->assertAccessIsGranted($client, \sprintf('/api/actions/timesheet/%s/calendar/sv', $original->getId()));
+
+        $content = $client->getResponse()->getContent();
+        self::assertIsString($content);
+        $actions = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        self::assertIsArray($actions);
+        $action = $actions[0];
+        self::assertIsArray($action);
+        self::assertSame('repeat', $action['id']);
+        self::assertSame('Fortsätt arbeta med', $action['title']);
+        self::assertIsString($action['class']);
+        self::assertStringContainsString('api-link', $action['class']);
+        $attributes = $action['attr'];
+        self::assertIsArray($attributes);
+        self::assertArrayNotHasKey('data-question', $attributes);
+        self::assertSame('kimai.timesheetStart kimai.timesheetUpdate', $attributes['data-event']);
+        self::assertSame('PATCH', $attributes['data-method']);
+        self::assertIsString($attributes['data-href']);
+        self::assertIsString($attributes['data-payload']);
+
+        $beforeStart = time();
+        $this->request($client, $attributes['data-href'], 'PATCH', [], $attributes['data-payload']);
+        self::assertResponseIsSuccessful();
+        $content = $client->getResponse()->getContent();
+        self::assertIsString($content);
+        $started = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        self::assertIsArray($started);
+        self::assertNotSame($original->getId(), $started['id']);
+        self::assertSame($original->getProject()?->getId(), $started['project']);
+        self::assertSame($original->getActivity()?->getId(), $started['activity']);
+        self::assertNull($started['end']);
+        self::assertIsString($started['begin']);
+        $begin = (new \DateTimeImmutable($started['begin']))->getTimestamp();
+        // The default tracking mode rounds the current start time down to a minute.
+        self::assertGreaterThanOrEqual($beforeStart - 60, $begin);
+        self::assertLessThanOrEqual(time(), $begin);
     }
 
     public function testGetActivityActions(): void
