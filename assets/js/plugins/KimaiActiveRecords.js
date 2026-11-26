@@ -31,27 +31,25 @@ export default class KimaiActiveRecords extends KimaiPlugin {
 
     init()
     {
-        // the menu can be hidden if user has no permissions to see it
-        if (document.querySelector(this._selector) === null) {
-            return;
+        const hasMenu = document.querySelector(this._selector) !== null;
+        if (hasMenu) {
+            const handleUpdate = () => {
+                this.reloadActiveRecords();
+            };
+
+            document.addEventListener('kimai.timesheetUpdate', handleUpdate);
+            document.addEventListener('kimai.timesheetDelete', handleUpdate);
+            document.addEventListener('kimai.activityUpdate', handleUpdate);
+            document.addEventListener('kimai.activityDelete', handleUpdate);
+            document.addEventListener('kimai.projectUpdate', handleUpdate);
+            document.addEventListener('kimai.projectDelete', handleUpdate);
+            document.addEventListener('kimai.customerUpdate', handleUpdate);
+            document.addEventListener('kimai.customerDelete', handleUpdate);
         }
-
-        const handleUpdate = () => {
-            this.reloadActiveRecords();
-        };
-
-        document.addEventListener('kimai.timesheetUpdate', handleUpdate);
-        document.addEventListener('kimai.timesheetDelete', handleUpdate);
-        document.addEventListener('kimai.activityUpdate', handleUpdate);
-        document.addEventListener('kimai.activityDelete', handleUpdate);
-        document.addEventListener('kimai.projectUpdate', handleUpdate);
-        document.addEventListener('kimai.projectDelete', handleUpdate);
-        document.addEventListener('kimai.customerUpdate', handleUpdate);
-        document.addEventListener('kimai.customerDelete', handleUpdate);
 
         // -----------------------------------------------------------------------
         // handle duration in the visible UI
-        this._updateBrowserTitle = !!this.getConfiguration('updateBrowserTitle');
+        this._updateBrowserTitle = hasMenu && !!this.getConfiguration('updateBrowserTitle');
 
         const handle = () => {
             this._updateDuration();
