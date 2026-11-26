@@ -646,6 +646,22 @@
         <source>recent.activities</source>
         <target state="translated">Starta om en av dina senaste aktiviteter</target>
       </trans-unit>
+      <trans-unit id="calendar.time_comparison" resname="calendar.time_comparison">
+        <source>calendar.time_comparison</source>
+        <target state="translated">Arbetad / registrerad tid</target>
+      </trans-unit>
+      <trans-unit id="calendar.copy_description" resname="calendar.copy_description">
+        <source>calendar.copy_description</source>
+        <target state="translated">Kopiera beskrivning</target>
+      </trans-unit>
+      <trans-unit id="calendar.description_copied" resname="calendar.description_copied">
+        <source>calendar.description_copied</source>
+        <target state="translated">Beskrivningen kopierades</target>
+      </trans-unit>
+      <trans-unit id="calendar.description_copy_failed" resname="calendar.description_copy_failed">
+        <source>calendar.description_copy_failed</source>
+        <target state="translated">Det gick inte att komma åt urklippet. Du kan markera och kopiera beskrivningen på kortet.</target>
+      </trans-unit>
       <trans-unit id="dTHY7Mw" resname="timesheet.start" xml:space="preserve">
         <source>timesheet.start</source>
         <target state="translated">Påbörja tidtagning</target>

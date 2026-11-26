@@ -1,13 +1,10 @@
 {% extends 'base.html.twig' %}
-{% import "macros/widgets.html.twig" as widgets %}
-
 {% block main %}
     <div class="row">
-        {% set hasTwoColumns = (config.dragDropAmount > 0 and dragAndDrop is not empty and (dragAndDrop|filter(s => s.entries|length > 0)|length > 0)) or form is not null %}
-        {% if hasTwoColumns %}
-        <div class="col-md-4 col-lg-3 d-none d-md-block order-last">
+        <div class="col-12 col-md-4 col-lg-3 order-last d-print-none">
             {% if form is not null %}
                 {% embed '@theme/embeds/card.html.twig' %}
+                    {% block box_class %}{{ form.user is defined and form.user.vars.choices|length > 1 ? 'd-none d-md-block' : 'd-none' }}{% endblock %}
                     {% block box_body %}
                         {{ form_start(form, {attr: {id: 'calendar-form'}}) }}
                         {% if form.user is defined %}
@@ -28,6 +25,7 @@
                     {% endblock %}
                 {% endembed %}
             {% endif %}
+            {% include 'calendar/customer-summary.html.twig' %}
             {% for source in dragAndDrop|filter(s => s.entries|length > 0) %}
                 {% embed '@theme/embeds/card.html.twig' %}
                     {% block box_title %}{{ source.title|trans({}, source.translationDomain) }}{% endblock %}
@@ -52,9 +50,7 @@
                 {% endembed %}
             {% endfor %}
         </div>
-        {% endif %}
-
-        <div class="col-xs-12 {% if hasTwoColumns %}col-md-8 col-lg-9 col-print-12{% endif %}">
+        <div class="col-12 col-md-8 col-lg-9 col-print-12">
             {% embed '@theme/embeds/card.html.twig' with {fullsize: true}  %}
                 {% block box_body %}
                     <div id="timesheet_calendar"></div>
@@ -132,6 +128,8 @@
                     customer: '{{ 'customer'|trans }}',
                     project: '{{ 'project'|trans }}',
                     activity: '{{ 'activity'|trans }}',
+                    descriptionCopied: '{{ 'calendar.description_copied'|trans|e('js') }}',
+                    descriptionCopyFailed: '{{ 'calendar.description_copy_failed'|trans|e('js') }}',
                 },
                 permissions: {
                     edit: {% if canEdit %}true{% else %}false{% endif %},

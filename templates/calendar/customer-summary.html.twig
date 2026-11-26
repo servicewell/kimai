@@ -1,0 +1,41 @@
+{% embed '@theme/embeds/card.html.twig' %}
+    {% block box_title %}
+        <span class="d-block">{{ 'time'|trans }} <span data-calendar-worked>{{ 0|duration }}</span> – <span data-calendar-registered>{{ 0|duration }}</span></span>
+        <small class="d-block text-body-secondary fw-normal">{{ 'calendar.time_comparison'|trans }}</small>
+    {% endblock %}
+    {% block box_body_class %}p-3{% endblock %}
+    {% block box_body %}
+        <div id="calendar-customer-summary" class="external-events" data-method="POST" data-route="{{ path('post_timesheet', {full: 'true'}) }}" data-route-replacer="{}" aria-busy="true">
+            <p class="text-body-secondary mb-0" data-calendar-empty hidden>{{ 'error.no_entries_found'|trans }}</p>
+            <div class="vstack gap-3" data-calendar-groups></div>
+            <template data-calendar-group>
+                <details class="calendar-customer-group">
+                    <summary class="calendar-customer-toggle fw-semibold">
+                        <span class="calendar-customer-color" aria-hidden="true"></span>
+                        <span class="flex-grow-1 text-break" data-customer-name></span>
+                        <span class="badge bg-secondary-lt flex-shrink-0" data-customer-total></span>
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </summary>
+                    <div class="vstack gap-2 mt-2" data-customer-cards></div>
+                </details>
+            </template>
+            <template data-calendar-card>
+                <article class="calendar-customer-card border rounded-2 position-relative">
+                    <div class="p-2" data-calendar-card-body>
+                        <div class="d-flex align-items-start justify-content-between gap-2">
+                            <strong class="text-break" data-calendar-project></strong>
+                            <span class="text-nowrap fw-semibold" data-calendar-duration></span>
+                        </div>
+                        <div class="small text-body-secondary text-break" data-calendar-activity></div>
+                        <div class="calendar-card-description mt-2 pe-4" data-calendar-description hidden></div>
+                        <div class="d-flex flex-wrap gap-1 mt-2" data-calendar-tags></div>
+                    </div>
+                    {% set copyLabel = 'calendar.copy_description'|trans %}
+                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary position-absolute bottom-0 end-0 m-1" data-calendar-copy aria-label="{{ copyLabel }}" title="{{ copyLabel }}" hidden>
+                        <i class="{{ 'copy'|icon }}" aria-hidden="true"></i>
+                    </button>
+                </article>
+            </template>
+        </div>
+    {% endblock %}
+{% endembed %}

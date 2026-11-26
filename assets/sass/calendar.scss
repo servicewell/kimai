@@ -12,6 +12,39 @@
     cursor: grab;
 }
 
+.calendar-customer-color {
+    width: .65rem;
+    height: .65rem;
+    flex-shrink: 0;
+    margin-block-start: .35rem;
+    border-radius: 50%;
+}
+
+.calendar-customer-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    list-style: none;
+    cursor: pointer;
+}
+
+.calendar-customer-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.calendar-customer-group[open] .calendar-customer-toggle > i {
+    transform: rotate(180deg);
+}
+
+.calendar-customer-card {
+    background-color: var(--tblr-bg-surface-secondary);
+}
+
+.calendar-card-description {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 #timesheet_calendar {
     --bs-gray-400: var(--tblr-border-color);
     --bs-gray-200: var(--tblr-gray-200);

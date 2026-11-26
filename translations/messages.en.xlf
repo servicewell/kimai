@@ -1378,6 +1378,22 @@
         <source>recent.activities</source>
         <target>Restart one of your last activities</target>
       </trans-unit>
+      <trans-unit id="calendar.time_comparison" resname="calendar.time_comparison">
+        <source>calendar.time_comparison</source>
+        <target>Worked / recorded time</target>
+      </trans-unit>
+      <trans-unit id="calendar.copy_description" resname="calendar.copy_description">
+        <source>calendar.copy_description</source>
+        <target>Copy description</target>
+      </trans-unit>
+      <trans-unit id="calendar.description_copied" resname="calendar.description_copied">
+        <source>calendar.description_copied</source>
+        <target>Description copied</target>
+      </trans-unit>
+      <trans-unit id="calendar.description_copy_failed" resname="calendar.description_copy_failed">
+        <source>calendar.description_copy_failed</source>
+        <target>Could not access the clipboard. You can select and copy the description on the card.</target>
+      </trans-unit>
       <trans-unit id="dTHY7Mw" resname="timesheet.start">
         <source>timesheet.start</source>
         <target>Start time-tracking</target>

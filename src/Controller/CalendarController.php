@@ -91,7 +91,7 @@ final class CalendarController extends AbstractController
         // also hide if the current time-tracking mode does not allow to change the start time
         if ($mode->canEditBegin() && $this->isGranted($permission)) {
             try {
-                $dragAndDrop = $this->calendarService->getDragAndDropResources($profile);
+                $dragAndDrop = $this->calendarService->getDragAndDropResources($profile, includeRecentActivities: false);
             } catch (\Exception $ex) {
                 $this->logException($ex);
             }

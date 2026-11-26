@@ -169,10 +169,17 @@ export default class KimaiCalendar {
 
             // the callbacks "viewDidMount" and "viewWillUnmount" are only called when switching between month and others, not between week and day
             datesSet: (dateInfo) => {
+                const events = this.getCalendar().getEvents();
+                this._renderDayAndWeekSum(dateInfo.view.type, events);
+                this.renderCustomerSummary(events, dateInfo.view);
                 document.dispatchEvent(new CustomEvent('kimai.calendar.changeDate', {detail: {
                     view: this.toExternalViewName(dateInfo.view.type),
                     date: dateInfo.view.currentStart.toISOString().split('T')[0],
                 }}));
+            },
+
+            loading: (loading) => {
+                this.customerSummary?.setAttribute('aria-busy', String(loading));
             },
 
             views: {
@@ -266,19 +273,29 @@ export default class KimaiCalendar {
             // called after all events of one source were set, so this can
             // and will be called multiple times before the calendar is initialized
             eventsSet: (events) => {
-                this._renderDayAndWeekSum(this.getCalendar().getCurrentData().viewSpec.type, events);
+                const view = this.getCalendar().view;
+                this._renderDayAndWeekSum(view.type, events);
+                this.renderCustomerSummary(events, view);
             }
         };
+
+        this.customerSummary = document.getElementById('calendar-customer-summary');
+        this.collapsedCustomers = new Set();
+        this.customerSummary?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-calendar-copy]');
+            if (button !== null) {
+                this.copyDescription(button);
+            }
+        });
 
         // ============= DRAG & DROP =============
 
         if (!this.hasPermission('punch') && this.hasPermission('create') && this.options.dragdrop !== undefined) {
-            const draggableList = [].slice.call(document.querySelectorAll(this.options.dragdrop.container));
-            draggableList.map((containerEl) => {
-                return new Draggable(containerEl, {
+            for (const container of document.querySelectorAll(this.options.dragdrop.container)) {
+                new Draggable(container, {
                     itemSelector: this.options.dragdrop.items
                 });
-            });
+            }
 
             calendarOptions = {...calendarOptions, ...{
                 droppable: true,
@@ -286,7 +303,7 @@ export default class KimaiCalendar {
                 drop: (dropInfo) => {
                     document.dispatchEvent(new CustomEvent('kimai.reloadContent'));
                     const entry = dropInfo.draggedEl;
-                    const source = entry.parentElement;
+                    const source = entry.closest(this.options.dragdrop.container);
                     let data = JSON.parse(entry.dataset.entry);
 
                     const urlReplacer = JSON.parse(source.dataset.routeReplacer);
@@ -593,6 +610,169 @@ export default class KimaiCalendar {
         this.calendar.getEventSources().forEach(source => source.refetch());
     }
 
+    renderCustomerSummary(events, view) {
+        if (!this.customerSummary) {
+            return;
+        }
+
+        const groupsElement = this.customerSummary.querySelector('[data-calendar-groups]');
+        for (const previous of groupsElement.children) {
+            if (previous.open) {
+                this.collapsedCustomers.delete(previous.dataset.customer);
+            } else {
+                this.collapsedCustomers.add(previous.dataset.customer);
+            }
+        }
+
+        const {groups, worked, registered} = this.getPeriodSummary(events, view);
+        const dates = this.kimai.getPlugin('date');
+        const summaryCard = this.customerSummary.closest('.card');
+        summaryCard.querySelector('[data-calendar-worked]').textContent = dates.formatSeconds(worked);
+        summaryCard.querySelector('[data-calendar-registered]').textContent = dates.formatSeconds(registered);
+        const groupTemplate = this.customerSummary.querySelector('[data-calendar-group]');
+        const cardTemplate = this.customerSummary.querySelector('[data-calendar-card]');
+        const canDrag = this.options.dragDropAmount > 0 && this.hasPermission('create') && this.hasPermission('edit_begin') && !this.hasPermission('punch');
+        const fragment = document.createDocumentFragment();
+
+        for (const [id, group] of groups) {
+            const disclosure = groupTemplate.content.firstElementChild.cloneNode(true);
+            disclosure.dataset.customer = id;
+            disclosure.open = !this.collapsedCustomers.has(id);
+            disclosure.querySelector('[data-customer-name]').textContent = group.name;
+            disclosure.querySelector('[data-customer-total]').textContent = dates.formatSeconds(group.duration);
+            disclosure.querySelector('.calendar-customer-color').style.backgroundColor = group.color;
+            const cardsElement = disclosure.querySelector('[data-customer-cards]');
+
+            for (const card of group.cards.values()) {
+                const article = cardTemplate.content.firstElementChild.cloneNode(true);
+                article.querySelector('[data-calendar-project]').textContent = card.project;
+                article.querySelector('[data-calendar-activity]').textContent = card.activity;
+                article.querySelector('[data-calendar-duration]').textContent = dates.formatSeconds(card.duration);
+
+                const description = article.querySelector('[data-calendar-description]');
+                const copyButton = article.querySelector('[data-calendar-copy]');
+                const tagsElement = article.querySelector('[data-calendar-tags]');
+                if (card.description.trim() !== '') {
+                    description.textContent = card.description;
+                    description.hidden = false;
+                    copyButton.hidden = false;
+                    tagsElement.classList.add('pe-4');
+                } else {
+                    copyButton.remove();
+                }
+                for (const tag of card.tags) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-secondary-lt text-wrap text-break';
+                    badge.textContent = tag;
+                    tagsElement.append(badge);
+                }
+                if (card.tags.length === 0) {
+                    tagsElement.remove();
+                }
+
+                if (canDrag) {
+                    const body = article.querySelector('[data-calendar-card-body]');
+                    body.dataset.entry = JSON.stringify(this.getCardDropData(card, view.type));
+                    body.classList.add('external-event', 'draggable');
+                }
+
+                cardsElement.append(article);
+            }
+
+            fragment.append(disclosure);
+        }
+
+        groupsElement.replaceChildren(fragment);
+        this.customerSummary.querySelector('[data-calendar-empty]').hidden = groups.length !== 0;
+    }
+
+    getCardDropData(card, viewType) {
+        const data = {project: card.projectId, activity: card.activityId};
+        if (viewType === 'timeGridDay') {
+            data.description = card.description;
+        }
+        if (this.options.dragDropCopyData) {
+            data.tags = card.tags.length > 0 ? card.tags.join(',') : null;
+        }
+
+        return data;
+    }
+
+    getPeriodSummary(events, view) {
+        const firstDay = view.activeStart.toISOString().slice(0, 10);
+        const afterLastDay = view.activeEnd.toISOString().slice(0, 10);
+        const referenceTime = DateTime.fromISO(this.options.now).toMillis();
+        const groups = new Map();
+        const workIntervals = [];
+        let registered = 0;
+
+        for (const event of events) {
+            if (!this.isKimaiSource(event)) {
+                continue;
+            }
+            const date = event.startStr.slice(0, 10);
+            if (date < firstDay || date >= afterLastDay || (this.options.showWeekends === false && DateTime.fromISO(date, {zone: 'UTC'}).weekday > 5)) {
+                continue;
+            }
+
+            const details = event.extendedProps;
+            const customerId = String(details.customerId);
+            if (!groups.has(customerId)) {
+                groups.set(customerId, {name: details.customer, color: event.backgroundColor, duration: 0, cards: new Map()});
+            }
+            const group = groups.get(customerId);
+            const tags = [...(details.tags ?? [])].sort();
+            const description = view.type === 'timeGridDay' ? (details.description ?? '') : '';
+            const cardKey = JSON.stringify([details.projectId, details.activityId, description, tags]);
+            if (!group.cards.has(cardKey)) {
+                group.cards.set(cardKey, {...details, description, tags, duration: 0});
+            }
+            const duration = this.getTimesheetDuration(details, referenceTime);
+            group.duration += duration;
+            group.cards.get(cardKey).duration += duration;
+            registered += duration;
+
+            const start = DateTime.fromISO(details.begin).toMillis();
+            const end = details.running ? referenceTime : DateTime.fromISO(details.timesheetEnd).toMillis();
+            // Kimai stores the length of a break without its position in the record.
+            const workEnd = end - details.break * 1000;
+            if (workEnd > start) {
+                workIntervals.push([start, workEnd]);
+            }
+        }
+
+        let worked = 0;
+        let coveredEnd = -Infinity;
+        for (const [start, end] of workIntervals.sort((a, b) => a[0] - b[0])) {
+            worked += Math.max(0, end - Math.max(start, coveredEnd));
+            coveredEnd = Math.max(coveredEnd, end);
+        }
+
+        return {
+            groups: [...groups.entries()].sort((a, b) => b[1].duration - a[1].duration),
+            worked: Math.floor(worked / 1000),
+            registered,
+        };
+    }
+
+    getTimesheetDuration(details, referenceTime) {
+        return details.running
+            ? Math.max(0, Math.floor((referenceTime - DateTime.fromISO(details.begin).toMillis()) / 1000) - details.break)
+            : (details.timesheetDuration ?? 0);
+    }
+
+    async copyDescription(button) {
+        const description = button.closest('.calendar-customer-card').querySelector('[data-calendar-description]');
+        const alert = this.kimai.getPlugin('alert');
+
+        try {
+            await navigator.clipboard.writeText(description.textContent);
+            alert.success(this.options.translations.descriptionCopied);
+        } catch {
+            alert.warning(this.options.translations.descriptionCopyFailed);
+        }
+    }
+
     /**
      * Only used on manipulated timesheets!
      *
@@ -602,23 +782,17 @@ export default class KimaiCalendar {
      */
     convertSourceForCalendar(apiItem) {
         const defaultColor = this.kimai.getConfiguration().get('defaultColor');
-        let color = apiItem.activity.color;
-        if (color === null || color === defaultColor) {
-            color = apiItem.project.color;
-            if (color === null || color === defaultColor) {
-                color = apiItem.project.customer.color;
-            }
-        }
-        if (color === null) {
-            color = defaultColor;
-        }
+        const customer = apiItem.project.customer;
+        const color = customer.color && customer.color !== defaultColor
+            ? customer.color
+            : (customer['color-safe'] ?? defaultColor);
 
         /** @type {KimaiDateUtils} DATES */
         const DATES = this.kimai.getPlugin('date');
 
         let title = this.options['patterns']['title'];
         title = title.replace('{project}', apiItem.project.name);
-        title = title.replace('{customer}', apiItem.project.customer.name);
+        title = title.replace('{customer}', customer.name);
         title = title.replace('{description}', apiItem.description ?? '');
         title = title.replace('{activity}', apiItem.activity.name ?? '');
 
@@ -642,12 +816,16 @@ export default class KimaiCalendar {
             start: apiItem.begin,
             end: apiItem.end,
             begin: apiItem.begin,
+            timesheetEnd: apiItem.end,
             running: apiItem.end === null,
             timesheetDuration: apiItem.duration,
             break: apiItem.break ?? 0,
             activity: apiItem.activity.name,
+            activityId: apiItem.activity.id,
             project: apiItem.project.name,
-            customer: apiItem.project.customer.name,
+            projectId: apiItem.project.id,
+            customer: customer.name,
+            customerId: customer.id,
             tags: apiItem.tags,
             color: color,
             textColor: KimaiColor.calculateContrastColor(color),
@@ -769,10 +947,7 @@ export default class KimaiCalendar {
             }
 
             if (timesheet) {
-                const duration = details.running
-                    ? Math.max(0, Math.floor((referenceTime - DateTime.fromISO(details.begin).toMillis()) / 1000) - details.break)
-                    : details.timesheetDuration;
-                durations[dateStr] += duration ?? 0;
+                durations[dateStr] += this.getTimesheetDuration(details, referenceTime);
             } else if (item.end !== null) {
                 const end = DateTime.fromJSDate(item.end).toUTC();
                 const duration = end.diff(start, 'hours').as('seconds');
@@ -806,7 +981,7 @@ export default class KimaiCalendar {
 
             const newElement = document.createElement('div');
             newElement.classList.add('fc-dailytotal');
-            newElement.textContent = DATES.formatSeconds(durations[dayDate]);
+            newElement.textContent = DATES.formatSeconds(durations[dayDate] ?? 0);
             dayEl.appendChild(newElement);
         }
     }
