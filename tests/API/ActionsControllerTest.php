@@ -42,6 +42,7 @@ class ActionsControllerTest extends APIControllerBaseTestCase
                 'repeat',
                 'edit',
                 'copy',
+                'split_timesheet',
                 'divider0',
                 'trash',
             ],
@@ -58,16 +59,19 @@ class ActionsControllerTest extends APIControllerBaseTestCase
             $result = json_decode($client->getResponse()->getContent(), true);
 
             self::assertIsArray($result);
+            self::assertSame($entries, array_column($result, 'id'));
+            if ($view === 'calendar') {
+                $split = $result[3];
+                self::assertIsArray($split);
+                self::assertSame('Split', $split['title']);
+                self::assertIsArray($split['attr']);
+                self::assertSame('PATCH', $split['attr']['data-method']);
+                self::assertSame('kimai.timesheetUpdate', $split['attr']['data-event']);
+                self::assertArrayNotHasKey('data-question', $split['attr']);
+            }
             foreach ($result as $item) {
                 self::assertIsArray($item);
                 self::assertApiResponseTypeStructure('PageActionItem', $item);
-            }
-
-            $i = 0;
-            foreach ($entries as $id) {
-                self::assertIsArray($result[$i]);
-                self::assertEquals($id, $result[$i]['id'], \sprintf('Failed action "%s" with name "%s" in view "%s"', $i, $id, $view));
-                $i++;
             }
         }
     }

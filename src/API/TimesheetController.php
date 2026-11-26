@@ -37,6 +37,7 @@ use OpenApi\Attributes as OA;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\ExpressionLanguage\Expression;
 use Symfony\Component\Form\FormError;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -542,6 +543,18 @@ final class TimesheetController extends BaseApiController
         $this->dispatcher->dispatch(new TimesheetDuplicatePostEvent($copyTimesheet, $timesheet));
 
         return $this->renderEntity($copyTimesheet, self::GROUPS_ENTITY);
+    }
+
+    /**
+     * Split a calendar timesheet at its midpoint
+     */
+    #[OA\Patch(x: ['internal' => true], responses: [new OA\Response(response: 200, description: 'Splits a timesheet into two adjacent records.')])]
+    #[Route(methods: ['PATCH'], path: '/{id}/split', name: 'split_timesheet', requirements: ['id' => '\d+'])]
+    public function splitAction(int $id, Request $request): Response
+    {
+        $this->service->splitTimesheet($id, $request->request->getInt('begin'), $request->request->getInt('end'));
+
+        return new JsonResponse();
     }
 
     /**

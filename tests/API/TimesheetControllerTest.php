@@ -1951,6 +1951,119 @@ class TimesheetControllerTest extends APIControllerBaseTestCase
         $this->assertEntityNotFoundForPatch(User::ROLE_ADMIN, '/api/timesheets/11/duplicate', []);
     }
 
+    public function testSplitActionCanBeRepeatedWithoutRoundingTheMidpoint(): void
+    {
+        $client = $this->getClientForAuthenticatedUser(User::ROLE_USER);
+        $this->setSystemConfiguration('timesheet.rules.break_time_active', '1');
+        $this->setSystemConfiguration('timesheet.rules.allow_overlapping_records', '0');
+        $entityManager = $this->getEntityManager();
+        $entityManager->persist((new Tag())->setName('calendar-split'));
+        $entityManager->flush();
+
+        $data = json_encode([
+            'activity' => 1,
+            'project' => 1,
+            'begin' => '2025-06-10T08:00:00',
+            'end' => '2025-06-10T16:06:00',
+            'break' => '00:30',
+            'description' => 'Calendar split test',
+            'tags' => 'calendar-split',
+        ], JSON_THROW_ON_ERROR);
+        $this->request($client, '/api/timesheets', 'POST', [], $data);
+        self::assertResponseIsSuccessful();
+        /** @var array{id: int, begin: string, end: string, duration: int, description: string, project: int, activity: int} $original */
+        $original = $this->decodeSplitResponse($client);
+        $begin = (new \DateTimeImmutable($original['begin']))->getTimestamp();
+        $end = (new \DateTimeImmutable($original['end']))->getTimestamp();
+        $midpoint = $begin + intdiv($end - $begin, 2);
+        $quarter = $begin + intdiv($midpoint - $begin, 2);
+        $this->request($client, '/api/actions/timesheet/' . $original['id'] . '/calendar/sv');
+        self::assertResponseIsSuccessful();
+        $actions = $this->decodeSplitResponse($client);
+        $split = array_column($actions, null, 'id')['split_timesheet'];
+        self::assertIsArray($split);
+        self::assertSame('Dela', $split['title']);
+        $url = $split['url'];
+        self::assertIsString($url);
+        self::assertIsArray($split['attr']);
+        $payload = $split['attr']['data-payload'];
+        self::assertIsString($payload);
+
+        $this->request($client, $url, 'PATCH', [], $payload);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $this->request($client, $url, 'PATCH', [], $payload);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $this->request($client, $url, 'PATCH', [], json_encode(['begin' => $begin, 'end' => $midpoint], JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $this->request($client, '/api/timesheets', 'GET', ['tags' => ['calendar-split'], 'order' => 'ASC', 'full' => 'true']);
+        self::assertResponseIsSuccessful();
+        /** @var list<array{id: int, begin: string, end: string, break: int, duration: int, description: string, project: array{id: int}, activity: array{id: int}}> $records */
+        $records = $this->decodeSplitResponse($client);
+        self::assertCount(3, $records);
+        self::assertSame($original['id'], $records[0]['id']);
+        self::assertCount(3, array_unique(array_column($records, 'id')));
+        self::assertSame([$begin, $quarter, $midpoint], array_map('strtotime', array_column($records, 'begin')));
+        self::assertSame([$quarter, $midpoint, $end], array_map('strtotime', array_column($records, 'end')));
+        self::assertSame([450, 450, 900], array_column($records, 'break'));
+        self::assertSame($original['duration'], array_sum(array_column($records, 'duration')));
+        foreach ($records as $record) {
+            self::assertSame($original['description'], $record['description']);
+            self::assertSame($original['project'], $record['project']['id']);
+            self::assertSame($original['activity'], $record['activity']['id']);
+        }
+    }
+
+    public function testSplitRollsBackWhenSecondHalfOverlaps(): void
+    {
+        $client = $this->getClientForAuthenticatedUser(User::ROLE_USER);
+        $this->setSystemConfiguration('timesheet.rules.allow_overlapping_records', '1');
+
+        $records = [];
+        foreach ([['08:00:00', '16:00:00'], ['14:00:00', '15:00:00']] as [$begin, $end]) {
+            $this->request($client, '/api/timesheets', 'POST', [], json_encode([
+                'activity' => 1,
+                'project' => 1,
+                'begin' => '2025-06-10T' . $begin,
+                'end' => '2025-06-10T' . $end,
+            ], JSON_THROW_ON_ERROR));
+            self::assertResponseIsSuccessful();
+            /** @var array{id: int, begin: string, end: string, duration: int} $record */
+            $record = $this->decodeSplitResponse($client);
+            $records[] = $record;
+        }
+
+        $this->setSystemConfiguration('timesheet.rules.allow_overlapping_records', '0');
+        $original = $records[0];
+        $url = '/api/timesheets/' . $original['id'];
+        $this->request($client, $url . '/split', 'PATCH', [], json_encode([
+            'begin' => strtotime($original['begin']),
+            'end' => strtotime($original['end']),
+        ], JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+
+        $this->request($client, $url);
+        self::assertResponseIsSuccessful();
+        $result = $this->decodeSplitResponse($client);
+        self::assertSame($original['end'], $result['end']);
+        self::assertSame($original['duration'], $result['duration']);
+
+        $this->request($client, '/api/timesheets', 'GET', ['begin' => '2025-06-10T00:00:00', 'end' => '2025-06-10T23:59:59']);
+        self::assertResponseIsSuccessful();
+        self::assertCount(2, $this->decodeSplitResponse($client));
+    }
+
+    /** @return array<array-key, mixed> */
+    private function decodeSplitResponse(HttpKernelBrowser $client): array
+    {
+        $content = $client->getResponse()->getContent();
+        self::assertIsString($content);
+        $result = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        self::assertIsArray($result);
+
+        return $result;
+    }
+
     // ------------------------------------------------------------------
     // GHSA-c6w6-57jj-62vh — restart/duplicate after project access revocation.
     //

@@ -34,6 +34,7 @@ use App\Timesheet\RunningTimeService;
 use App\Utils\Pagination;
 use DateInterval;
 use DateTime;
+use Doctrine\DBAL\LockMode;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -136,6 +137,16 @@ class TimesheetRepository extends EntityRepository
     public function rollback(): void
     {
         $this->getEntityManager()->rollback();
+    }
+
+    /**
+     * @template T
+     * @param callable(?Timesheet): T $update
+     * @return T
+     */
+    public function updateWithLock(int $id, callable $update): mixed
+    {
+        return $this->getEntityManager()->wrapInTransaction(fn () => $update($this->find($id, LockMode::PESSIMISTIC_WRITE)));
     }
 
     public function save(Timesheet $timesheet): void

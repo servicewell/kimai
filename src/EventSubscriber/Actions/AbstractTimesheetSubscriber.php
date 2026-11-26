@@ -11,12 +11,20 @@ namespace App\EventSubscriber\Actions;
 
 use App\Entity\Timesheet;
 use App\Event\PageActionsEvent;
+use App\Timesheet\TimesheetService;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
  * @internal
  */
 abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
 {
+    public function __construct(AuthorizationCheckerInterface $auth, UrlGeneratorInterface $urlGenerator, private readonly TimesheetService $timesheetService)
+    {
+        parent::__construct($auth, $urlGenerator);
+    }
+
     protected function timesheetActions(PageActionsEvent $event, string $routeEdit, string $routeDuplicate): void
     {
         $payload = $event->getPayload();
@@ -39,6 +47,21 @@ abstract class AbstractTimesheetSubscriber extends AbstractActionsSubscriber
             if ($this->isGranted('duplicate', $timesheet)) {
                 $class = $event->isView('edit') ? '' : 'modal-ajax-form';
                 $event->addAction('copy', ['title' => 'copy', 'url' => $this->path($routeDuplicate, ['id' => $timesheet->getId()]), 'class' => $class . ' dd-ts-duplicate']);
+            }
+
+            if ($event->isView('calendar') && $this->timesheetService->canSplitTimesheet($timesheet)) {
+                $event->addAction('split_timesheet', [
+                    'url' => $this->path('split_timesheet', ['id' => $timesheet->getId()]),
+                    'class' => 'api-link dd-ts-split',
+                    'attr' => [
+                        'data-event' => 'kimai.timesheetUpdate',
+                        'data-method' => 'PATCH',
+                        'data-payload' => json_encode([
+                            'begin' => $timesheet->getBegin()?->getTimestamp(),
+                            'end' => $timesheet->getEnd()?->getTimestamp(),
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ]);
             }
 
             if ($event->countActions() > 0) {
