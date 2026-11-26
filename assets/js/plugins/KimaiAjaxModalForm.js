@@ -73,6 +73,19 @@ export default class KimaiAjaxModalForm extends KimaiReducedClickHandler {
     }
 
     /**
+     * @param {HTMLFormElement} form
+     */
+    closeForm(form)
+    {
+        if (document.querySelector(this._getFormIdentifier()) !== form) {
+            return;
+        }
+
+        this._isDirty = false;
+        this._getModal().hide();
+    }
+
+    /**
      * @param {string} url
      * @param {function(Response)} error the callback to execute if the fetch failed
      */
@@ -259,8 +272,7 @@ export default class KimaiAjaxModalForm extends KimaiReducedClickHandler {
                                     events.trigger(eventName);
                                 }
 
-                                this._isDirty = false;
-                                this._getModal().hide();
+                                this.closeForm(form);
                             }
                         });
                     })

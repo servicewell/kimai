@@ -31,6 +31,7 @@ export default class KimaiAPILink extends KimaiPlugin {
             while (target !== null && typeof target.matches === "function" && !target.matches('body')) {
                 if (target.classList.contains(this._selector)) {
                     const attributes = target.dataset;
+                    const modalForm = attributes['closeModal'] === 'true' ? target.closest('form') : null;
 
                     let url = attributes['href'];
                     if (!url) {
@@ -40,11 +41,11 @@ export default class KimaiAPILink extends KimaiPlugin {
                     if (attributes.question !== undefined) {
                         this.getContainer().getPlugin('alert').question(attributes.question, (value) => {
                             if (value) {
-                                this._callApi(url, attributes);
+                                this._callApi(url, attributes, modalForm);
                             }
                         });
                     } else {
-                        this._callApi(url, attributes);
+                        this._callApi(url, attributes, modalForm);
                     }
 
                     event.preventDefault();
@@ -59,9 +60,10 @@ export default class KimaiAPILink extends KimaiPlugin {
     /**
      * @param {string} url
      * @param {DOMStringMap} attributes
+     * @param {HTMLFormElement|null} modalForm
      * @private
      */
-    _callApi(url, attributes)
+    _callApi(url, attributes, modalForm)
     {
         const method = attributes['method'];
         const eventName = attributes['event'];
@@ -70,6 +72,9 @@ export default class KimaiAPILink extends KimaiPlugin {
         /** @type {KimaiEvent} EVENTS */
         const EVENTS = this.getContainer().getPlugin('event');
         const successHandle = (result) => {
+            if (modalForm !== null) {
+                this.getContainer().getPlugin('modal').closeForm(modalForm);
+            }
             EVENTS.trigger(eventName, result ?? null);
             document.dispatchEvent(new CustomEvent('kimai.reloadedContent'));
         };
