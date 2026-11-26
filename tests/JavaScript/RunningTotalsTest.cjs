@@ -27,7 +27,7 @@ const calendarSource = fs.readFileSync(path.join(root, 'assets/js/widgets/KimaiC
     .replace(/^import .+;\r?\n/gm, '')
     .replace('export default class KimaiCalendar', 'class KimaiCalendar');
 
-function createCalendar(now, dates, timezone = 'UTC') {
+function createCalendar(now, dates, timezone = 'UTC', clipboard) {
     const headers = new Map(dates.map(date => [date, {
         dataset: { date },
         appendChild(element) { this.total = element.textContent; },
@@ -48,6 +48,7 @@ function createCalendar(now, dates, timezone = 'UTC') {
         DateTime,
         CustomEvent,
         document,
+        navigator: { clipboard },
         KimaiColor: { calculateContrastColor() { return '#000'; } },
     });
     const calendar = Object.create(Calendar.prototype);
@@ -56,11 +57,56 @@ function createCalendar(now, dates, timezone = 'UTC') {
     return { calendar, headers };
 }
 
-function event(calendar, begin, end, duration = 0, pause = 0) {
+test('calendar uses the customer color ahead of the project and activity colors', () => {
+    const { calendar } = createCalendar('2026-11-24T10:00:00Z', []);
+    const customer = { name: 'Customer', color: '#357ecd', 'color-safe': '#663399' };
+    const record = { project: { name: 'Project', color: '#228833', customer }, activity: { name: 'Activity', color: '#004488' }, end: null };
+
+    assert.equal(calendar.convertSourceForCalendar(record).color, '#357ecd');
+    customer.color = '#fff';
+    assert.equal(calendar.convertSourceForCalendar(record).color, '#663399');
+    delete customer['color-safe'];
+    assert.equal(calendar.convertSourceForCalendar(record).color, '#fff');
+});
+
+test('calendar copies a card description with its line breaks and punctuation intact', async () => {
+    const writes = [];
+    const notifications = [];
+    const { calendar } = createCalendar('2026-11-24T10:00:00Z', [], 'UTC', { async writeText(text) { writes.push(text); } });
+    calendar.options.translations = { descriptionCopied: 'Copied', descriptionCopyFailed: 'Failed' };
+    calendar.kimai.getPlugin = () => ({ success: message => notifications.push(message), warning: message => notifications.push(message) });
+    const description = { textContent: 'Mobile forms & UI\nTested <draft>.' };
+    const button = { closest: () => ({ querySelector: () => description }) };
+
+    await calendar.copyDescription(button);
+
+    assert.deepEqual(writes, [description.textContent]);
+    assert.deepEqual(notifications, ['Copied']);
+});
+
+test('dragging a day card includes its description independently of the optional copy-data setting', () => {
+    const { calendar } = createCalendar('2026-11-24T10:00:00Z', []);
+    const card = {projectId: 3, activityId: 4, description: 'First line\nSecond line', tags: ['forms']};
+
+    calendar.options.dragDropCopyData = false;
+    const day = calendar.getCardDropData(card, 'timeGridDay');
+    assert.equal(day.description, card.description);
+    assert.equal(day.project, 3);
+    assert.equal(day.activity, 4);
+    assert.ok(!Object.hasOwn(day, 'tags'));
+
+    calendar.options.dragDropCopyData = true;
+    assert.equal(calendar.getCardDropData(card, 'timeGridDay').tags, 'forms');
+    for (const type of ['timeGridWeek', 'dayGridMonth']) {
+        assert.ok(!Object.hasOwn(calendar.getCardDropData(card, type), 'description'));
+    }
+});
+
+function event(calendar, begin, end, duration = 0, pause = 0, {customerId = 1, description = '', tags = []} = {}) {
     const record = {
-        id: 1, begin, end, duration, break: pause,
-        project: { name: 'Project', color: '#fff', customer: { name: 'Customer', color: '#fff' } },
-        activity: { name: 'Activity', color: '#fff' },
+        id: 1, begin, end, duration, break: pause, description, tags,
+        project: { id: 2, name: 'Project', color: '#fff', customer: { id: customerId, name: 'Customer', color: '#fff' } },
+        activity: { id: 3, name: 'Activity', color: '#fff' },
     };
     const converted = calendar.convertSourceForCalendar(record);
     const { refined, extra } = refineEventDef(converted, eventContext);
@@ -82,10 +128,80 @@ function event(calendar, begin, end, duration = 0, pause = 0) {
         start: rendered.start,
         startStr: rendered.startStr,
         end: rendered.end,
+        backgroundColor: rendered.backgroundColor,
         source: { id: 'kimai-user-timesheets' },
         extendedProps: rendered.extendedProps,
     };
 }
+
+test('customer summary follows the visible range even when the calendar reuses cached events', () => {
+    const { calendar } = createCalendar('2026-11-26T12:00:00+01:00', [], 'Europe/Stockholm');
+    const records = [
+        event(calendar, '2026-11-05T09:00:00+01:00', '2026-11-05T13:00:00+01:00', 14400),
+        event(calendar, '2026-11-25T09:00:00+01:00', '2026-11-25T11:00:00+01:00', 7200),
+        event(calendar, '2026-11-26T00:30:00+01:00', '2026-11-26T01:30:00+01:00', 3600),
+        event(calendar, '2026-11-26T11:00:00+01:00', null, 0, 600),
+        event(calendar, '2026-11-28T09:00:00+01:00', '2026-11-28T10:00:00+01:00', 3600),
+        event(calendar, '2026-12-01T09:00:00+01:00', '2026-12-01T13:00:00+01:00', 14400),
+    ];
+    records.push({ ...records[2], source: {id: 'google-holidays'} });
+    calendar.options.showWeekends = false;
+    const duration = (type, start, end) => calendar.getPeriodSummary(records, {
+        type, activeStart: new Date(start), activeEnd: new Date(end),
+    });
+
+    for (const [type, start, end, expected] of [
+        ['timeGridDay', '2026-11-26', '2026-11-27', 6600],
+        ['timeGridWeek', '2026-11-23', '2026-11-30', 13800],
+        ['dayGridMonth', '2026-10-26', '2026-11-30', 28200],
+    ]) {
+        const summary = duration(type, start, end);
+        assert.equal(summary.groups[0][1].duration, expected);
+        assert.equal(summary.registered, expected);
+        assert.equal(summary.worked, expected);
+    }
+});
+
+test('customer summary groups descriptions only in day view and distinguishes tags and customer IDs', () => {
+    const { calendar } = createCalendar('2026-11-26T12:00:00Z', []);
+    const records = [
+        {description: 'First', tags: ['forms', 'build']},
+        {description: 'First', tags: ['build', 'forms']},
+        {description: 'Second', tags: ['forms', 'build']},
+        {description: 'First', tags: ['review']},
+        {customerId: 5, description: 'First', tags: ['forms', 'build']},
+    ].map(details => event(calendar, '2026-11-26T08:00:00Z', '2026-11-26T09:00:00Z', 3600, 0, details));
+    const view = {type: 'timeGridDay', activeStart: new Date('2026-11-26'), activeEnd: new Date('2026-11-27')};
+    const {groups: day} = calendar.getPeriodSummary(records, view);
+    assert.equal(day.length, 2);
+    assert.equal(day[0][0], '1');
+    assert.equal(day[1][0], '5');
+    assert.deepEqual(Array.from(day[0][1].cards.values(), card => [card.description, card.duration]), [
+        ['First', 7200], ['Second', 3600], ['First', 3600],
+    ]);
+
+    for (const type of ['timeGridWeek', 'dayGridMonth']) {
+        const {groups} = calendar.getPeriodSummary(records, {...view, type});
+        assert.deepEqual(Array.from(groups[0][1].cards.values(), card => [card.description, card.duration]), [
+            ['', 10800], ['', 3600],
+        ]);
+    }
+});
+
+test('worked time counts overlapping clock time once across customers while registered time adds all entries', () => {
+    const { calendar } = createCalendar('2026-11-26T16:00:00+01:00', [], 'Europe/Stockholm');
+    const records = [
+        event(calendar, '2026-11-26T12:30:00+01:00', '2026-11-26T16:00:00+01:00', 12600, 0, {customerId: 2}),
+        event(calendar, '2026-11-26T08:00:00+01:00', '2026-11-26T08:30:00+01:00', 1800),
+        event(calendar, '2026-11-26T12:00:00+01:00', '2026-11-26T15:30:00+01:00', 12600),
+    ];
+    const view = {type: 'timeGridDay', activeStart: new Date('2026-11-26'), activeEnd: new Date('2026-11-27')};
+    const summary = calendar.getPeriodSummary(records, view);
+
+    assert.equal(summary.worked, 16200);
+    assert.equal(summary.registered, 27000);
+    assert.deepEqual(Array.from(summary.groups, ([id, group]) => [id, group.duration]), [['1', 14400], ['2', 12600]]);
+});
 
 test('calendar combines stored duration with running time minus breaks', () => {
     const { calendar, headers } = createCalendar('2026-11-24T10:00:00Z', ['2026-11-24']);

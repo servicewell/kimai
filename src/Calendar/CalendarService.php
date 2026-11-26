@@ -31,7 +31,7 @@ final class CalendarService
      * @return DragAndDropSource[]
      * @throws \Exception
      */
-    public function getDragAndDropResources(User $user): array
+    public function getDragAndDropResources(User $user, bool $includeRecentActivities = true): array
     {
         $maxAmount = $this->configuration->getCalendarDragAndDropMaxEntries();
         $event = new CalendarDragAndDropSourceEvent($user, $maxAmount);
@@ -40,19 +40,21 @@ final class CalendarService
             return [];
         }
 
-        $data = $this->repository->getRecentActivities($user, null, $maxAmount);
+        if ($includeRecentActivities) {
+            $data = $this->repository->getRecentActivities($user, null, $maxAmount);
 
-        $recentActivity = new RecentActivityEvent($user, $data);
-        $this->dispatcher->dispatch($recentActivity);
+            $recentActivity = new RecentActivityEvent($user, $data);
+            $this->dispatcher->dispatch($recentActivity);
 
-        $entries = [];
-        $colorHelper = new Color();
-        $copy = $this->configuration->isCalendarDragAndDropCopyData();
-        foreach ($recentActivity->getRecentActivities() as $timesheet) {
-            $entries[] = new TimesheetEntry($timesheet, $colorHelper->getTimesheetColor($timesheet), $copy);
+            $entries = [];
+            $colorHelper = new Color();
+            $copy = $this->configuration->isCalendarDragAndDropCopyData();
+            foreach ($recentActivity->getRecentActivities() as $timesheet) {
+                $entries[] = new TimesheetEntry($timesheet, $colorHelper->getTimesheetColor($timesheet), $copy);
+            }
+
+            $event->addSource(new RecentActivitiesSource($entries));
         }
-
-        $event->addSource(new RecentActivitiesSource($entries));
 
         $this->dispatcher->dispatch($event);
 
@@ -111,6 +113,7 @@ final class CalendarService
             'timeframeBegin' => $this->configuration->getCalendarTimeframeBegin(),
             'timeframeEnd' => $this->configuration->getCalendarTimeframeEnd(),
             'dragDropAmount' => $this->configuration->getCalendarDragAndDropMaxEntries(),
+            'dragDropCopyData' => $this->configuration->isCalendarDragAndDropCopyData(),
             'entryTitlePattern' => $this->configuration->find('calendar.title_pattern'),
         ];
 
